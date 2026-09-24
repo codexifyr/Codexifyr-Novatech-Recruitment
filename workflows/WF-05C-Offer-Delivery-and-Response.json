@@ -1,0 +1,765 @@
+{
+  "name": "WF-05C - Offer Delivery and Candidate Response",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "novatech/offers/send",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "9cb4acab-c0ea-43e8-8446-383fe475fccf",
+      "name": "Receive Offer Delivery Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -960,
+        80
+      ],
+      "webhookId": "f5030000-0000-4a00-8000-000000000002"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nconst offerId = String(body.offer_id || '').trim();\n\nconst uuidPattern =\n  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\n\nconst errors = [];\n\nif (!uuidPattern.test(offerId)) {\n  errors.push('A valid offer_id is required');\n}\n\nconst rawPortalUrl = String(\n  body.candidate_portal_base_url || 'http://localhost:3000'\n);\n\nconst portalBaseUrl = rawPortalUrl.endsWith('/')\n  ? rawPortalUrl.slice(0, -1)\n  : rawPortalUrl;\n\nreturn [{\n  json: {\n    offer_id: offerId,\n    candidate_portal_base_url: portalBaseUrl,\n    request_valid: errors.length === 0,\n    validation_errors: errors\n  }\n}];"
+      },
+      "id": "12134968-3777-459a-8470-c131f6c647fe",
+      "name": "Validate Delivery Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -720,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "offers",
+        "limit": 1,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.offer_id }}"
+            }
+          ]
+        }
+      },
+      "id": "8a1df301-473b-4565-b326-b392645b9aaf",
+      "name": "Load Approved Offer",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        80
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "f5030000-0000-4a00-8000-000000000005",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "APPROVED",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0d355219-de7d-4e11-a556-5c1844552790",
+      "name": "Offer Ready to Send?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -240,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "applications",
+        "limit": 1,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.application_id }}"
+            }
+          ]
+        }
+      },
+      "id": "a4da12e8-6a6c-4d81-beb9-b9362f8c0ffd",
+      "name": "Load Offer Application",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const application = $json;\nconst offer = $('Load Approved Offer').first().json;\nconst request = $('Validate Delivery Request').first().json;\nconst portalUrl = `${request.candidate_portal_base_url}/offer-response?offer_id=${encodeURIComponent(offer.id)}`;\nconst message = `Hello ${application.name_at_application},\n\nCongratulations! NovaTech Solutions has approved your employment offer.\n\nOffer code: ${offer.offer_code}\nSalary: ${offer.currency} ${offer.salary}\nJoining date: ${offer.joining_date}\nProbation: ${offer.probation_months} month(s)\nOffer expiry: ${offer.expiry_date}\n\nReview and respond through the candidate portal:\n${portalUrl}\n\nRegards,\nNovaTech Solutions Recruitment Team`;\nreturn [{ json: { offer_id: offer.id, offer_code: offer.offer_code, application_id: offer.application_id, candidate_id: application.candidate_id, candidate_name: application.name_at_application, candidate_email: application.email_at_application, salary: offer.salary, currency: offer.currency, joining_date: offer.joining_date, expiry_date: offer.expiry_date, email_to: application.email_at_application, email_subject: `Employment Offer - ${offer.offer_code}`, email_message: message, portal_url: portalUrl, sent_at: new Date().toISOString() } }];"
+      },
+      "id": "6f6ece93-b48b-42d4-9cd1-2d32be0a5cf0",
+      "name": "Prepare Offer Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email_to }}",
+        "subject": "={{ $json.email_subject }}",
+        "message": "={{ $json.email_message }}",
+        "options": {}
+      },
+      "id": "d5b058a3-c6f0-4f3b-aa68-29071df63d4a",
+      "name": "Send Offer Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        480,
+        0
+      ],
+      "webhookId": "2dd2a1bc-e7b6-4908-9977-f1ade48d0c2b",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "rDJCSu8S6yHLuaYR",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "offers",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Prepare Offer Email').first().json.offer_id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "OFFERED"
+            },
+            {
+              "fieldId": "sent_at",
+              "fieldValue": "={{ $('Prepare Offer Email').first().json.sent_at }}"
+            }
+          ]
+        }
+      },
+      "id": "e00c810b-fe3e-4010-8836-824ef337ad06",
+      "name": "Mark Offer Sent",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        720,
+        0
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "applications",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Prepare Offer Email').first().json.application_id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "OFFERED"
+            },
+            {
+              "fieldId": "status_reason",
+              "fieldValue": "Approved offer sent to candidate"
+            }
+          ]
+        }
+      },
+      "id": "19cf4feb-9717-49cb-99fc-a03b028bffc2",
+      "name": "Mark Application Offered",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        960,
+        0
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('Prepare Offer Email').first().json;\nreturn [{ json: { success: true, email_sent: true, offer_id: source.offer_id, offer_code: source.offer_code, application_id: source.application_id, candidate_email: source.candidate_email, offer_status: 'OFFERED', application_status: 'OFFERED', display_status: 'Offer Sent to Candidate', admin_message: 'The approved offer was emailed successfully and is awaiting the candidate response.', next_workflow: 'WF-05C - Candidate Offer Response' } }];"
+      },
+      "id": "b92e7beb-80f5-4d9f-aa66-abfeb42e1e35",
+      "name": "Prepare Delivery Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const offer = $json;\nreturn [{ json: { success: false, email_sent: false, offer_id: offer.id || $('Validate Delivery Request').first().json.offer_id, offer_status: offer.status || 'NOT_FOUND', display_status: 'Offer Delivery Blocked', admin_message: offer.id ? `Offer must be APPROVED before sending. Current status: ${offer.status}.` : 'Offer was not found.' } }];"
+      },
+      "id": "08098f97-c407-4f8e-856f-af9a764e2d44",
+      "name": "Prepare Delivery Blocked",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "f7b6083f-8d23-4ca2-91a7-efedc6d385e8",
+      "name": "Return Offer Delivery Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1440,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "novatech/offers/respond",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "489c002c-e651-4b45-8b30-b3cc1c594e76",
+      "name": "Receive Candidate Offer Response",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -960,
+        448
+      ],
+      "webhookId": "f5030000-0000-4a00-8000-000000000016"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nconst offerId = String(body.offer_id || '').trim();\nconst response = String(body.response || '').trim().toUpperCase();\nconst notes = String(body.notes || '').trim();\nconst uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\nconst errors = [];\nif (!uuidPattern.test(offerId)) errors.push('A valid offer_id is required');\nif (!['ACCEPTED', 'DECLINED', 'NEGOTIATION'].includes(response)) errors.push('response must be ACCEPTED, DECLINED, or NEGOTIATION');\nif (response === 'NEGOTIATION' && !notes) errors.push('notes are required for negotiation');\nreturn [{ json: { offer_id: offerId, candidate_response: response, response_notes: notes || null, candidate_responded_at: new Date().toISOString(), request_valid: errors.length === 0, validation_errors: errors } }];"
+      },
+      "id": "99ed2d79-c56d-4399-936c-29878e15d25e",
+      "name": "Validate Candidate Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -720,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "offers",
+        "limit": 1,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.offer_id }}"
+            }
+          ]
+        }
+      },
+      "id": "a7488edd-0588-4c79-8059-f034cde1abbb",
+      "name": "Load Offered Offer",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        448
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f5030000-0000-4a00-8000-000000000019",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "OFFERED",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4ecb2cb1-c246-4968-ba9a-dbfff4a471ec",
+      "name": "Offer Awaiting Response?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -240,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "offers",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "={{ $('Validate Candidate Response').first().json.candidate_response }}"
+            },
+            {
+              "fieldId": "candidate_responded_at",
+              "fieldValue": "={{ $('Validate Candidate Response').first().json.candidate_responded_at }}"
+            },
+            {
+              "fieldId": "response_notes",
+              "fieldValue": "={{ $('Validate Candidate Response').first().json.response_notes }}"
+            }
+          ]
+        }
+      },
+      "id": "d9ed75af-3b40-4198-a3b1-be9eff3a2418",
+      "name": "Record Candidate Response",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        0,
+        368
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "applications",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Load Offered Offer').first().json.application_id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "={{ $('Validate Candidate Response').first().json.candidate_response }}"
+            },
+            {
+              "fieldId": "status_reason",
+              "fieldValue": "={{ `Candidate offer response: ${$('Validate Candidate Response').first().json.candidate_response}` }}"
+            }
+          ]
+        }
+      },
+      "id": "3ace1084-5246-457c-b813-9f0f79bc96ba",
+      "name": "Update Application Response Status",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        240,
+        368
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const request = $('Validate Candidate Response').first().json;\nconst offer = $('Load Offered Offer').first().json;\nconst accepted = request.candidate_response === 'ACCEPTED';\nreturn [{ json: { success: true, offer_id: offer.id, offer_code: offer.offer_code, application_id: offer.application_id, candidate_response: request.candidate_response, offer_status: request.candidate_response, application_status: request.candidate_response, display_status: accepted ? 'Offer Accepted' : request.candidate_response === 'DECLINED' ? 'Offer Declined' : 'Offer Negotiation Requested', message: accepted ? 'Your offer acceptance has been recorded successfully.' : request.candidate_response === 'DECLINED' ? 'Your offer decision has been recorded.' : 'Your negotiation request has been sent to the hiring team.', next_workflow: accepted ? 'WF-06 - Employee Onboarding' : request.candidate_response === 'NEGOTIATION' ? 'ADMIN_REVIEW' : 'PROCESS_END' } }];"
+      },
+      "id": "cfda2db5-45b5-4522-8ee6-170cc1849db8",
+      "name": "Prepare Candidate Response Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const request = $('Validate Candidate Response').first().json;\nconst offer = $json;\nreturn [{ json: { success: false, offer_id: request.offer_id, offer_status: offer.status || 'NOT_FOUND', display_status: 'Offer Response Blocked', message: offer.id ? `This offer is not awaiting a response. Current status: ${offer.status}.` : 'Offer was not found.' } }];"
+      },
+      "id": "36f0fb33-d8b8-4a87-9d50-1bf41d75c0ad",
+      "name": "Prepare Response Blocked",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "b9ed20c1-9eea-45a1-a6d6-717e5fa3cd92",
+      "name": "Return Candidate Response Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        736,
+        560
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Receive Offer Delivery Request": {
+      "main": [
+        [
+          {
+            "node": "Validate Delivery Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Delivery Request": {
+      "main": [
+        [
+          {
+            "node": "Load Approved Offer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Approved Offer": {
+      "main": [
+        [
+          {
+            "node": "Offer Ready to Send?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Offer Ready to Send?": {
+      "main": [
+        [
+          {
+            "node": "Load Offer Application",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Delivery Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Offer Application": {
+      "main": [
+        [
+          {
+            "node": "Prepare Offer Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Offer Email": {
+      "main": [
+        [
+          {
+            "node": "Send Offer Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Offer Email": {
+      "main": [
+        [
+          {
+            "node": "Mark Offer Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Offer Sent": {
+      "main": [
+        [
+          {
+            "node": "Mark Application Offered",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Application Offered": {
+      "main": [
+        [
+          {
+            "node": "Prepare Delivery Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Delivery Success": {
+      "main": [
+        [
+          {
+            "node": "Return Offer Delivery Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Delivery Blocked": {
+      "main": [
+        [
+          {
+            "node": "Return Offer Delivery Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Receive Candidate Offer Response": {
+      "main": [
+        [
+          {
+            "node": "Validate Candidate Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Candidate Response": {
+      "main": [
+        [
+          {
+            "node": "Load Offered Offer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Offered Offer": {
+      "main": [
+        [
+          {
+            "node": "Offer Awaiting Response?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Offer Awaiting Response?": {
+      "main": [
+        [
+          {
+            "node": "Record Candidate Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Response Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Candidate Response": {
+      "main": [
+        [
+          {
+            "node": "Update Application Response Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Application Response Status": {
+      "main": [
+        [
+          {
+            "node": "Prepare Candidate Response Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Candidate Response Success": {
+      "main": [
+        [
+          {
+            "node": "Return Candidate Response Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Response Blocked": {
+      "main": [
+        [
+          {
+            "node": "Return Candidate Response Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Return Candidate Response Result": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "a6343f31-3eab-40dc-9b19-9b8f856ad41c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "8e5636d4ea21301bcee3485dafe413395d732724aaa50aa177880d363fc8d1a9"
+  },
+  "nodeGroups": [],
+  "id": "42mVe7pBrV8WZKFt",
+  "tags": []
+}

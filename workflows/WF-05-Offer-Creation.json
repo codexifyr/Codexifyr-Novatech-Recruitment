@@ -1,0 +1,749 @@
+{
+  "name": "WF-05 - Offer Creation and Approval Setup",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "novatech/offers/create",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "055d1ffd-e6d2-40cf-b258-c5d51170f3a9",
+      "name": "Receive Selected Candidate",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1680,
+        240
+      ],
+      "webhookId": "f5010000-0000-4a00-8000-000000000002"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nconst applicationId = String(body.application_id || '').trim();\nconst salary = Number(body.salary ?? body.offer_salary);\nconst currency = String(body.currency || 'PKR').trim().toUpperCase();\nconst joiningDate = body.joining_date ? String(body.joining_date).slice(0, 10) : null;\nconst probationMonths = Number(body.probation_months ?? 3);\nconst reportingManagerId = body.reporting_manager_id ? String(body.reporting_manager_id).trim() : null;\nconst documentUrl = body.document_url ? String(body.document_url).trim() : null;\nconst errors = [];\nif (!applicationId) errors.push('application_id is required');\nif (!Number.isFinite(salary) || salary <= 0) errors.push('salary must be greater than zero');\nif (joiningDate && Number.isNaN(Date.parse(joiningDate))) errors.push('joining_date must be a valid date');\nif (!Number.isInteger(probationMonths) || probationMonths < 0 || probationMonths > 12) errors.push('probation_months must be between 0 and 12');\nreturn [{ json: { application_id: applicationId, salary, currency, joining_date: joiningDate, probation_months: probationMonths, reporting_manager_id: reportingManagerId, document_url: documentUrl, request_valid: errors.length === 0, validation_errors: errors, received_at: new Date().toISOString() } }];"
+      },
+      "id": "c365eaf9-ec53-4b54-b12c-48acdd00e28f",
+      "name": "Validate Offer Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1440,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "f5010000-0000-4a00-8000-000000000004",
+              "leftValue": "={{ $json.request_valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5543b55a-d576-4e2e-bbbc-9bbad5599522",
+      "name": "Valid Offer Request?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1200,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "applications",
+        "limit": 1,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.application_id }}"
+            }
+          ]
+        }
+      },
+      "id": "479c59a9-27d9-4946-99a2-23bbc27263c4",
+      "name": "Load Selected Application",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -960,
+        160
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "f5010000-0000-4a00-8000-000000000007",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "f5010000-0000-4a00-8000-000000000008",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "SELECTED",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "eb7b0efa-3066-4489-9c85-c3923192c551",
+      "name": "Application Eligible for Offer?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -720,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "offers",
+        "limit": 1,
+        "matchType": "allFilters"
+      },
+      "id": "7397ca7f-7ccb-47d5-997d-e1e30ebbe763",
+      "name": "Find Existing Offer",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        80
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "f5010000-0000-4a00-8000-000000000011",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "bfdcf0e5-9717-4953-91c2-ffbc7114fa30",
+      "name": "Offer Already Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -240,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const request = $('Validate Offer Request').first().json;\nconst application = $('Load Selected Application').first().json;\nconst now = new Date();\nconst suffix = `${Date.now()}${Math.random().toString(36).slice(2, 8)}`;\nconst expiry = new Date(now);\nexpiry.setUTCDate(expiry.getUTCDate() + 7);\nconst joiningDate = request.joining_date || application.joining_date;\nif (!joiningDate) throw new Error('joining_date is missing from both request and application');\nconst approvalLevels = request.salary > 300000 ? 2 : 1;\nreturn [{ json: { ...request, application_code: application.application_code, candidate_id: application.candidate_id, offer_code: `OFF-${now.getUTCFullYear()}-${suffix.slice(-10)}`, joining_date: joiningDate, expiry_date: expiry.toISOString().slice(0, 10), approval_required_levels: approvalLevels, offer_status: 'PENDING_APPROVAL' } }];"
+      },
+      "id": "9ac0b7c9-70a5-4932-9972-27e70910b5a5",
+      "name": "Prepare Offer Record",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "offers",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "offer_code",
+              "fieldValue": "={{ $json.offer_code }}"
+            },
+            {
+              "fieldId": "application_id",
+              "fieldValue": "={{ $json.application_id }}"
+            },
+            {
+              "fieldId": "salary",
+              "fieldValue": "={{ $json.salary }}"
+            },
+            {
+              "fieldId": "currency",
+              "fieldValue": "={{ $json.currency }}"
+            },
+            {
+              "fieldId": "joining_date",
+              "fieldValue": "={{ $json.joining_date }}"
+            },
+            {
+              "fieldId": "probation_months",
+              "fieldValue": "={{ $json.probation_months }}"
+            },
+            {
+              "fieldId": "reporting_manager_id",
+              "fieldValue": "={{ $json.reporting_manager_id }}"
+            },
+            {
+              "fieldId": "expiry_date",
+              "fieldValue": "={{ $json.expiry_date }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "PENDING_APPROVAL"
+            },
+            {
+              "fieldId": "approval_required_levels",
+              "fieldValue": "={{ $json.approval_required_levels }}"
+            },
+            {
+              "fieldId": "document_url",
+              "fieldValue": "={{ $json.document_url }}"
+            }
+          ]
+        }
+      },
+      "id": "3721513d-bf2c-40a2-a334-58045d7b10b3",
+      "name": "Create Offer",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        240,
+        160
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const offer = $json;\nconst source = $('Prepare Offer Record').first().json;\nreturn [{ json: { ...source, offer_id: offer.id, offer_code: offer.offer_code || source.offer_code, offer_status: offer.status || source.offer_status } }];"
+      },
+      "id": "f81e0a0a-7108-429e-9eb7-4c0c38debd69",
+      "name": "Attach Offer ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "offer_approvals",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "offer_id",
+              "fieldValue": "={{ $json.offer_id }}"
+            },
+            {
+              "fieldId": "approval_level",
+              "fieldValue": "1"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "PENDING"
+            }
+          ]
+        }
+      },
+      "id": "18fdb5c2-6d60-4032-83fd-00deaa8d3024",
+      "name": "Create Level 1 Approval",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        720,
+        160
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "f5010000-0000-4a00-8000-000000000017",
+              "leftValue": "={{ $('Attach Offer ID').first().json.approval_required_levels }}",
+              "rightValue": 2,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "140fba57-9bc9-42b0-8bb8-e09fefd98ca7",
+      "name": "Level 2 Approval Required?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "offer_approvals",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "offer_id",
+              "fieldValue": "={{ $('Attach Offer ID').first().json.offer_id }}"
+            },
+            {
+              "fieldId": "approval_level",
+              "fieldValue": "2"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "PENDING"
+            }
+          ]
+        }
+      },
+      "id": "85f2b020-07b9-4208-87cc-0ba198aea57e",
+      "name": "Create Level 2 Approval",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        80
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "applications",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Attach Offer ID').first().json.application_id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "OFFER_PENDING_APPROVAL"
+            },
+            {
+              "fieldId": "status_reason",
+              "fieldValue": "Offer created and awaiting required approvals"
+            }
+          ]
+        }
+      },
+      "id": "9ada3a81-e124-4330-a287-bc039fc84ddb",
+      "name": "Update Application Offer Status",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        160
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('Attach Offer ID').first().json;\nreturn [{ json: { success: true, offer_created: true, application_id: source.application_id, application_code: source.application_code, candidate_id: source.candidate_id, offer_id: source.offer_id, offer_code: source.offer_code, salary: source.salary, currency: source.currency, joining_date: source.joining_date, expiry_date: source.expiry_date, approval_required_levels: source.approval_required_levels, offer_status: 'PENDING_APPROVAL', application_status: 'OFFER_PENDING_APPROVAL', display_status: 'Offer Awaiting Approval', admin_message: `Offer created successfully and sent for ${source.approval_required_levels} approval level(s).`, next_workflow: 'WF-05B - Offer Approval Decision' } }];"
+      },
+      "id": "d5c98c02-89ba-43f5-a562-00c8addb2551",
+      "name": "Prepare Offer Creation Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const offer = $json;\nreturn [{ json: { success: true, offer_created: false, idempotent_result: true, application_id: offer.application_id, offer_id: offer.id, offer_code: offer.offer_code, salary: offer.salary, currency: offer.currency, joining_date: offer.joining_date, expiry_date: offer.expiry_date, approval_required_levels: offer.approval_required_levels, offer_status: offer.status, display_status: 'Existing Offer Returned', admin_message: 'An offer already exists for this application, so no duplicate offer was created.', next_workflow: offer.status === 'PENDING_APPROVAL' ? 'WF-05B - Offer Approval Decision' : null } }];"
+      },
+      "id": "921c5c17-d04d-41be-be5f-4c1adf551195",
+      "name": "Prepare Existing Offer Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        144,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const request = $('Validate Offer Request').first().json;\nconst application = $('Load Selected Application').first().json;\nreturn [{ json: { success: false, offer_created: false, application_id: request.application_id, application_status: application.status || 'NOT_FOUND', display_status: 'Offer Creation Blocked', admin_message: application.id ? `Application must be SELECTED before an offer can be created. Current status: ${application.status}.` : 'Application was not found.', next_workflow: 'ADMIN_REVIEW' } }];"
+      },
+      "id": "42ffa7cb-95d9-49b4-b480-2becf9c80468",
+      "name": "Prepare Ineligible Application Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { success: false, offer_created: false, display_status: 'Invalid Offer Request', admin_message: 'Offer request could not be processed.', validation_errors: $json.validation_errors || [] } }];"
+      },
+      "id": "da68e336-6e6f-45ad-b062-4617564aaa7b",
+      "name": "Prepare Invalid Offer Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -928,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "04452057-ba22-4432-abc6-6fd7a4446fe4",
+      "name": "Return Offer Creation Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        2000,
+        304
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Receive Selected Candidate": {
+      "main": [
+        [
+          {
+            "node": "Validate Offer Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Offer Request": {
+      "main": [
+        [
+          {
+            "node": "Valid Offer Request?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid Offer Request?": {
+      "main": [
+        [
+          {
+            "node": "Load Selected Application",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Invalid Offer Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Selected Application": {
+      "main": [
+        [
+          {
+            "node": "Application Eligible for Offer?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Application Eligible for Offer?": {
+      "main": [
+        [
+          {
+            "node": "Find Existing Offer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Ineligible Application Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Existing Offer": {
+      "main": [
+        [
+          {
+            "node": "Offer Already Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Offer Already Exists?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Existing Offer Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Offer Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Offer Record": {
+      "main": [
+        [
+          {
+            "node": "Create Offer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Offer": {
+      "main": [
+        [
+          {
+            "node": "Attach Offer ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach Offer ID": {
+      "main": [
+        [
+          {
+            "node": "Create Level 1 Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Level 1 Approval": {
+      "main": [
+        [
+          {
+            "node": "Level 2 Approval Required?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Level 2 Approval Required?": {
+      "main": [
+        [
+          {
+            "node": "Create Level 2 Approval",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Application Offer Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Level 2 Approval": {
+      "main": [
+        [
+          {
+            "node": "Update Application Offer Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Application Offer Status": {
+      "main": [
+        [
+          {
+            "node": "Prepare Offer Creation Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Offer Creation Success": {
+      "main": [
+        [
+          {
+            "node": "Return Offer Creation Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Existing Offer Result": {
+      "main": [
+        [
+          {
+            "node": "Return Offer Creation Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Ineligible Application Result": {
+      "main": [
+        [
+          {
+            "node": "Return Offer Creation Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Invalid Offer Result": {
+      "main": [
+        [
+          {
+            "node": "Return Offer Creation Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "ae783b64-8a02-49e4-972c-18d6a3a03690",
+  "meta": {
+    "instanceId": "8e5636d4ea21301bcee3485dafe413395d732724aaa50aa177880d363fc8d1a9"
+  },
+  "nodeGroups": [],
+  "id": "DoQGSjcvk9shlw6k",
+  "tags": []
+}

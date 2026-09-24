@@ -1,0 +1,741 @@
+{
+  "name": "WF-06B - Onboarding Task Tracking",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "novatech/onboarding/tasks/complete",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "d021323f-a4b2-45cb-90db-8c4f1fc83684",
+      "name": "Receive Task Completion",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -2160,
+        160
+      ],
+      "webhookId": "f60b0000-0000-4a00-8000-000000000002"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nconst taskId = String(body.task_id || '').trim();\nconst uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\nconst errors = [];\nif (!uuidPattern.test(taskId)) errors.push('A valid task_id is required');\nreturn [{ json: { task_id: taskId, request_valid: errors.length === 0, validation_errors: errors, completed_at: new Date().toISOString() } }];"
+      },
+      "id": "2bf5c6c6-9fd7-4988-858b-f63d136a3525",
+      "name": "Validate Task Completion",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1920,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "onboarding_tasks",
+        "limit": 1,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.task_id }}"
+            }
+          ]
+        }
+      },
+      "id": "08f006b4-2dec-4a3c-a76e-7575d9376cc0",
+      "name": "Load Onboarding Task",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1680,
+        160
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "f60b0000-0000-4a00-8000-000000000005",
+              "leftValue": "={{ ['PENDING', 'IN_PROGRESS', 'OVERDUE'].includes($json.status) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0890be21-32fa-4882-8f7f-fd23d4e6fe24",
+      "name": "Task Can Be Completed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1440,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "onboarding_tasks",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "COMPLETED"
+            },
+            {
+              "fieldId": "completed_at",
+              "fieldValue": "={{ $('Validate Task Completion').first().json.completed_at }}"
+            }
+          ]
+        }
+      },
+      "id": "252b51e6-d4bf-40d0-b588-cca32f240448",
+      "name": "Complete Onboarding Task",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1200,
+        80
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "employees",
+        "limit": 1,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Load Onboarding Task').first().json.employee_id }}"
+            }
+          ]
+        }
+      },
+      "id": "6ed1f4a3-9d77-4136-872a-32473161410d",
+      "name": "Load Task Employee",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -960,
+        80
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "onboarding_tasks",
+        "returnAll": true,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "employee_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        }
+      },
+      "id": "3790d18f-f096-4273-a774-da06a3134737",
+      "name": "Load All Employee Tasks",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -720,
+        80
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const tasks = $input.all().map(item => item.json);\nconst employee = $('Load Task Employee').first().json;\nconst completedCount = tasks.filter(task => task.status === 'COMPLETED').length;\nreturn [{ json: { employee_id: employee.id, employee_code: employee.employee_code, application_id: employee.application_id, task_count: tasks.length, completed_count: completedCount, remaining_count: tasks.length - completedCount, all_complete: tasks.length > 0 && tasks.every(task => task.status === 'COMPLETED') } }];"
+      },
+      "id": "325d2720-bdff-4594-9032-52c63bf89ff4",
+      "name": "Evaluate Onboarding Completion",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "f60b0000-0000-4a00-8000-000000000011",
+              "leftValue": "={{ $json.all_complete }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e8907c61-8ec8-4cac-8751-6d96690fcd17",
+      "name": "All Tasks Complete?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -240,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "employees",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.employee_id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "COMPLETED"
+            }
+          ]
+        }
+      },
+      "id": "581c3e48-1c39-41ea-a97e-fdf9d1bc841b",
+      "name": "Complete Employee Onboarding",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "applications",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Evaluate Onboarding Completion').first().json.application_id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "ONBOARDED"
+            },
+            {
+              "fieldId": "status_reason",
+              "fieldValue": "All onboarding tasks completed"
+            }
+          ]
+        }
+      },
+      "id": "30c27f0f-355d-4112-988f-3fa4d2519df3",
+      "name": "Mark Application Onboarded",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        240,
+        0
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const summary = $('Evaluate Onboarding Completion').first().json;\nreturn [{ json: { success: true, task_completed: true, employee_id: summary.employee_id, employee_code: summary.employee_code, completed_tasks: summary.completed_count, remaining_tasks: summary.remaining_count, employee_status: 'COMPLETED', application_status: 'ONBOARDED', display_status: 'Onboarding Completed', message: 'All onboarding tasks are complete.' } }];"
+      },
+      "id": "4736cbbd-6c68-4e64-b666-39782e52da7f",
+      "name": "Prepare Onboarding Complete Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { success: true, task_completed: true, employee_id: $json.employee_id, employee_code: $json.employee_code, completed_tasks: $json.completed_count, remaining_tasks: $json.remaining_count, employee_status: 'ONBOARDING', application_status: 'ONBOARDING', display_status: 'Onboarding In Progress', message: `${$json.remaining_count} onboarding task(s) remain.` } }];"
+      },
+      "id": "3293ad57-1e8f-4051-b441-0a7d6f8bf4de",
+      "name": "Prepare Task Completion Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const task = $json;\nreturn [{ json: { success: task.status === 'COMPLETED', idempotent_result: task.status === 'COMPLETED', task_id: task.id || $('Validate Task Completion').first().json.task_id, task_status: task.status || 'NOT_FOUND', display_status: task.status === 'COMPLETED' ? 'Task Already Completed' : 'Task Completion Blocked', message: task.status === 'COMPLETED' ? 'This onboarding task was already completed.' : 'The onboarding task was not found or cannot be completed.' } }];"
+      },
+      "id": "cb4043a8-a43a-4dc5-93f5-a548d4e33157",
+      "name": "Prepare Task Blocked Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1200,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "da120d07-bfe5-4749-8bf3-49bb6e100663",
+      "name": "Return Task Completion Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        720,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "cca08bac-5e3a-4d21-be9c-60cf0911dd88",
+      "name": "Daily Overdue Task Check",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -2160,
+        528
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "dea11dee-9ab0-4f33-adac-aeeda95d473a",
+      "name": "Manual Overdue Test",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2160,
+        672
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "onboarding_tasks",
+        "returnAll": true
+      },
+      "id": "6098bb5a-7d69-4ac8-aeab-d0eac0482114",
+      "name": "Load Onboarding Task Queue",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1904,
+        592
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const today = new Date().toISOString().slice(0, 10);\nreturn $input.all().filter(item => ['PENDING', 'IN_PROGRESS'].includes(item.json.status) && item.json.due_date < today).map(item => ({ json: { ...item.json, overdue_checked_at: new Date().toISOString() } }));"
+      },
+      "id": "d5f15545-df96-4a5d-a53f-fe3a1acca276",
+      "name": "Select Overdue Tasks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1664,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "onboarding_tasks",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "OVERDUE"
+            }
+          ]
+        }
+      },
+      "id": "618fc064-c8c9-403b-a83e-094b3c9c7067",
+      "name": "Mark Task Overdue",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1424,
+        592
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => ({ json: { success: true, task_id: item.json.id, employee_id: item.json.employee_id, task_key: item.json.task_key, task_status: 'OVERDUE', display_status: 'Onboarding Task Overdue' } }));"
+      },
+      "id": "baacd572-49c4-4494-b421-5b477a55a795",
+      "name": "Return Overdue Task Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1184,
+        592
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Receive Task Completion": {
+      "main": [
+        [
+          {
+            "node": "Validate Task Completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Task Completion": {
+      "main": [
+        [
+          {
+            "node": "Load Onboarding Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Onboarding Task": {
+      "main": [
+        [
+          {
+            "node": "Task Can Be Completed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Task Can Be Completed?": {
+      "main": [
+        [
+          {
+            "node": "Complete Onboarding Task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Task Blocked Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Complete Onboarding Task": {
+      "main": [
+        [
+          {
+            "node": "Load Task Employee",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Task Employee": {
+      "main": [
+        [
+          {
+            "node": "Load All Employee Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load All Employee Tasks": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Onboarding Completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Onboarding Completion": {
+      "main": [
+        [
+          {
+            "node": "All Tasks Complete?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "All Tasks Complete?": {
+      "main": [
+        [
+          {
+            "node": "Complete Employee Onboarding",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Task Completion Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Complete Employee Onboarding": {
+      "main": [
+        [
+          {
+            "node": "Mark Application Onboarded",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Application Onboarded": {
+      "main": [
+        [
+          {
+            "node": "Prepare Onboarding Complete Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Onboarding Complete Result": {
+      "main": [
+        [
+          {
+            "node": "Return Task Completion Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Task Completion Result": {
+      "main": [
+        [
+          {
+            "node": "Return Task Completion Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Task Blocked Result": {
+      "main": [
+        [
+          {
+            "node": "Return Task Completion Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Overdue Task Check": {
+      "main": [
+        [
+          {
+            "node": "Load Onboarding Task Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Overdue Test": {
+      "main": [
+        [
+          {
+            "node": "Load Onboarding Task Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Onboarding Task Queue": {
+      "main": [
+        [
+          {
+            "node": "Select Overdue Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Overdue Tasks": {
+      "main": [
+        [
+          {
+            "node": "Mark Task Overdue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Task Overdue": {
+      "main": [
+        [
+          {
+            "node": "Return Overdue Task Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "2053114c-2ccc-429f-b603-c550b223b441",
+  "meta": {
+    "instanceId": "8e5636d4ea21301bcee3485dafe413395d732724aaa50aa177880d363fc8d1a9"
+  },
+  "nodeGroups": [],
+  "id": "QH3HccZKSdnsO4dx",
+  "tags": []
+}

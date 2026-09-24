@@ -1,0 +1,619 @@
+{
+  "name": "WF-07 - Error and Recovery",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "7ad57fae-2aa5-42aa-9746-9e2df203f668",
+      "name": "Capture Workflow Error",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "novatech/errors/capture",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "271e3f09-1f96-4033-a828-c63035a80593",
+      "name": "Receive Error Test Event",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        144
+      ],
+      "webhookId": "f7000000-0000-4a00-8000-000000000003"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.body || $json;\nconst execution = raw.execution || {};\nconst workflow = raw.workflow || {};\nconst error = execution.error || raw.error || {};\nconst message = String(error.message || raw.error_message || 'Unknown workflow error');\nconst code = String(error.name || error.code || raw.error_code || 'WORKFLOW_ERROR').toUpperCase();\nconst workflowName = String(workflow.name || raw.workflow_name || 'UNKNOWN_WORKFLOW');\nconst retryablePattern = /(timeout|timed out|rate limit|429|econnreset|enotfound|502|503|504|temporar|network)/i;\nconst retryable = raw.retryable === true || retryablePattern.test(`${code} ${message}`);\nconst now = new Date();\nconst nextRetry = retryable ? new Date(now.getTime() + 5 * 60 * 1000).toISOString() : null;\nconst suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;\nreturn [{ json: { correlation_id: String(raw.correlation_id || `COR-ERROR-${suffix}`), workflow_name: workflowName, execution_id: String(execution.id || raw.execution_id || ''), entity_type: raw.entity_type || null, entity_id: raw.entity_id || null, error_code: code.slice(0, 100), error_message: message, original_payload: raw.original_payload || raw.payload || raw, retryable, retry_count: Number(raw.retry_count || 0), status: 'OPEN', next_retry_at: nextRetry, captured_at: now.toISOString() } }];"
+      },
+      "id": "749f70bb-d35d-4e74-9110-8d1a7f0dc114",
+      "name": "Normalize and Classify Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        272,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "automation_errors",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "correlation_id",
+              "fieldValue": "={{ $json.correlation_id }}"
+            },
+            {
+              "fieldId": "workflow_name",
+              "fieldValue": "={{ $json.workflow_name }}"
+            },
+            {
+              "fieldId": "execution_id",
+              "fieldValue": "={{ $json.execution_id }}"
+            },
+            {
+              "fieldId": "entity_type",
+              "fieldValue": "={{ $json.entity_type }}"
+            },
+            {
+              "fieldId": "entity_id",
+              "fieldValue": "={{ $json.entity_id }}"
+            },
+            {
+              "fieldId": "error_code",
+              "fieldValue": "={{ $json.error_code }}"
+            },
+            {
+              "fieldId": "error_message",
+              "fieldValue": "={{ $json.error_message }}"
+            },
+            {
+              "fieldId": "original_payload",
+              "fieldValue": "={{ JSON.stringify($json.original_payload) }}"
+            },
+            {
+              "fieldId": "retryable",
+              "fieldValue": "={{ $json.retryable }}"
+            },
+            {
+              "fieldId": "retry_count",
+              "fieldValue": "={{ $json.retry_count }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "OPEN"
+            },
+            {
+              "fieldId": "next_retry_at",
+              "fieldValue": "={{ $json.next_retry_at }}"
+            }
+          ]
+        }
+      },
+      "id": "5bb4d2a9-40dc-4497-b146-93ddedbc594d",
+      "name": "Create Error Queue Record",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        528,
+        80
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const errorRecord = $json;\nconst source = $('Normalize and Classify Error').first().json;\nreturn [{ json: { success: true, error_captured: true, error_id: errorRecord.id, correlation_id: source.correlation_id, workflow_name: source.workflow_name, error_code: source.error_code, retryable: source.retryable, retry_count: source.retry_count, queue_status: 'OPEN', next_retry_at: source.next_retry_at, display_status: source.retryable ? 'Error Queued for Retry' : 'Error Queued for Manual Review' } }];"
+      },
+      "id": "b18beb73-7869-4ce8-88e2-58ed1c9fe7f5",
+      "name": "Return Error Capture Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        784,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "dc71712a-ae27-4df8-b12f-d3137ab07424",
+      "name": "Retry Queue Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        352
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "a50917d6-42ea-4234-ad27-99cd047fbf26",
+      "name": "Manual Retry Queue Test",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "automation_errors",
+        "returnAll": true
+      },
+      "id": "7538a5ce-f500-4fd9-a582-3a86a87ba278",
+      "name": "Load Error Queue",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        272,
+        400
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst isManualTest = $('Manual Retry Queue Test').isExecuted;\n\n// Manual testing mein pehla retryable error فوراً process hoga\nif (isManualTest) {\n  const candidate = items.find(item =>\n    item.json.retryable &&\n    ['OPEN', 'RETRYING'].includes(item.json.status)\n  );\n\n  return candidate\n    ? [{ json: { ...candidate.json, manual_test: true } }]\n    : [];\n}\n\n// Scheduled production execution due time follow karegi\nconst now = Date.now();\n\nreturn items.filter(item => {\n  const row = item.json;\n\n  if (\n    !row.retryable ||\n    !['OPEN', 'RETRYING'].includes(row.status)\n  ) {\n    return false;\n  }\n\n  if (!row.next_retry_at) {\n    return true;\n  }\n\n  return new Date(row.next_retry_at).getTime() <= now;\n});"
+      },
+      "id": "0bdac87e-f4cc-4f12-b82b-6155d2625b1c",
+      "name": "Select Due Retry Items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => {\n  const row = item.json;\n  const newCount = Number(row.retry_count || 0) + 1;\n  const exhausted = newCount >= 3;\n  const backoffMinutes = 5 * Math.pow(2, Math.max(0, newCount - 1));\n  return { json: { ...row, new_retry_count: newCount, new_status: exhausted ? 'DEAD' : 'RETRYING', new_next_retry_at: exhausted ? null : new Date(Date.now() + backoffMinutes * 60 * 1000).toISOString(), retry_exhausted: exhausted } };\n});"
+      },
+      "id": "06c7887f-7666-4923-bdeb-528a8fd0c511",
+      "name": "Prepare Retry State",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        752,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "automation_errors",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "retry_count",
+              "fieldValue": "={{ $json.new_retry_count }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "={{ $json.new_status }}"
+            },
+            {
+              "fieldId": "next_retry_at",
+              "fieldValue": "={{ $json.new_next_retry_at }}"
+            }
+          ]
+        }
+      },
+      "id": "ebae8e09-2d13-4ed4-bc7f-83bfe2821ca5",
+      "name": "Update Retry Queue State",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        992,
+        400
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const sourceItems = $('Prepare Retry State').all();\nreturn $input.all().map((item, index) => {\n  const source = sourceItems[index] ? sourceItems[index].json : item.json;\n  return { json: { success: true, error_id: source.id, retry_count: source.new_retry_count, queue_status: source.new_status, next_retry_at: source.new_next_retry_at, display_status: source.retry_exhausted ? 'Moved to Dead Queue' : 'Retry Scheduled' } };\n});"
+      },
+      "id": "9e5a1495-cb7e-40ce-9e22-177f4077ea0c",
+      "name": "Return Retry Queue Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1232,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "novatech/errors/replay",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "05aeb55b-9a9a-4aae-a7cb-9d7c0771bdb6",
+      "name": "Receive Manual Replay",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        704
+      ],
+      "webhookId": "f7000000-0000-4a00-8000-000000000015"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nconst errorId = String(body.error_id || '').trim();\nconst targetKey = String(body.target_key || '').trim().toUpperCase();\nconst correctedPayload = body.corrected_payload || {};\nconst operatorId = body.operator_id ? String(body.operator_id).trim() : null;\nconst notes = String(body.resolution_notes || 'Corrected and replayed by operator').trim();\nconst uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\nconst routes = { APPLICATION_INTAKE: '/webhook/novatech/applications', INTERVIEW_CONFIRM: '/webhook/novatech/interviews/confirm', INTERVIEW_RESCHEDULE: '/webhook/novatech/interviews/reschedule', OFFER_CREATE: '/webhook/novatech/offers/create', OFFER_APPROVAL: '/webhook/novatech/offers/approval', OFFER_SEND: '/webhook/novatech/offers/send', OFFER_RESPONSE: '/webhook/novatech/offers/respond', ONBOARDING_START: '/webhook/novatech/onboarding/start', ONBOARDING_TASK_COMPLETE: '/webhook/novatech/onboarding/tasks/complete' };\nconst errors = [];\nif (!uuidPattern.test(errorId)) errors.push('A valid error_id is required');\nif (!routes[targetKey]) errors.push('target_key is not allowed');\nif (!correctedPayload || typeof correctedPayload !== 'object' || Array.isArray(correctedPayload)) errors.push('corrected_payload must be an object');\nif (operatorId && !uuidPattern.test(operatorId)) errors.push('operator_id must be a valid UUID');\nreturn [{ json: { error_id: errorId, target_key: targetKey, replay_url: routes[targetKey] ? `https://codexifyr.app.n8n.cloud${routes[targetKey]}` : null, corrected_payload: correctedPayload, operator_id: operatorId, resolution_notes: notes, replay_requested_at: new Date().toISOString(), request_valid: errors.length === 0, validation_errors: errors } }];"
+      },
+      "id": "616cc90e-554f-4650-8bbc-c467647aeebd",
+      "name": "Validate and Route Replay",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        272,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "automation_errors",
+        "limit": 1,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.error_id }}"
+            }
+          ]
+        }
+      },
+      "id": "4baf0179-1597-4358-a2b6-ec900b602ae9",
+      "name": "Load Replay Error",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        528,
+        704
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Validate and Route Replay').first().json.replay_url }}",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($('Validate and Route Replay').first().json.corrected_payload) }}",
+        "options": {}
+      },
+      "id": "d09b53b1-7eb9-42be-9ad4-f99813a6b066",
+      "name": "Replay Through Safe Webhook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        784,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "automation_errors",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Validate and Route Replay').first().json.error_id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "RESOLVED"
+            },
+            {
+              "fieldId": "resolved_at",
+              "fieldValue": "={{ new Date().toISOString() }}"
+            },
+            {
+              "fieldId": "resolved_by",
+              "fieldValue": "={{ $('Validate and Route Replay').first().json.operator_id }}"
+            },
+            {
+              "fieldId": "resolution_notes",
+              "fieldValue": "={{ $('Validate and Route Replay').first().json.resolution_notes }}"
+            }
+          ]
+        }
+      },
+      "id": "7a018a2f-80e0-4529-8ab0-708bd927dcee",
+      "name": "Resolve Replayed Error",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        704
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const request = $('Validate and Route Replay').first().json;\nconst replay = $('Replay Through Safe Webhook').first().json;\nreturn [{ json: { success: true, error_id: request.error_id, target_key: request.target_key, queue_status: 'RESOLVED', display_status: 'Error Replayed Successfully', admin_message: 'The corrected payload was replayed through an approved workflow endpoint.', replay_result: replay } }];"
+      },
+      "id": "099f579f-b239-48ae-8ba1-1cb472815403",
+      "name": "Prepare Replay Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1312,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "62a1b618-623f-48fb-9a77-febe88317163",
+      "name": "Return Replay Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1568,
+        704
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Capture Workflow Error": {
+      "main": [
+        [
+          {
+            "node": "Normalize and Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Receive Error Test Event": {
+      "main": [
+        [
+          {
+            "node": "Normalize and Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize and Classify Error": {
+      "main": [
+        [
+          {
+            "node": "Create Error Queue Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Error Queue Record": {
+      "main": [
+        [
+          {
+            "node": "Return Error Capture Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry Queue Schedule": {
+      "main": [
+        [
+          {
+            "node": "Load Error Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Retry Queue Test": {
+      "main": [
+        [
+          {
+            "node": "Load Error Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Error Queue": {
+      "main": [
+        [
+          {
+            "node": "Select Due Retry Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Due Retry Items": {
+      "main": [
+        [
+          {
+            "node": "Prepare Retry State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Retry State": {
+      "main": [
+        [
+          {
+            "node": "Update Retry Queue State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Retry Queue State": {
+      "main": [
+        [
+          {
+            "node": "Return Retry Queue Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Receive Manual Replay": {
+      "main": [
+        [
+          {
+            "node": "Validate and Route Replay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate and Route Replay": {
+      "main": [
+        [
+          {
+            "node": "Load Replay Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Replay Error": {
+      "main": [
+        [
+          {
+            "node": "Replay Through Safe Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Replay Through Safe Webhook": {
+      "main": [
+        [
+          {
+            "node": "Resolve Replayed Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Replayed Error": {
+      "main": [
+        [
+          {
+            "node": "Prepare Replay Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Replay Success": {
+      "main": [
+        [
+          {
+            "node": "Return Replay Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "03387911-eab9-4679-b780-22043568638c",
+  "meta": {
+    "instanceId": "8e5636d4ea21301bcee3485dafe413395d732724aaa50aa177880d363fc8d1a9"
+  },
+  "nodeGroups": [],
+  "id": "caA6JQjiYwpZtDd3",
+  "tags": []
+}

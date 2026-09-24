@@ -1,0 +1,476 @@
+{
+  "name": "WF-02 - Candidate Processing",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "c3fe629e-26e6-4b94-ab09-4c990c446e35",
+      "name": "Start Candidate Processing",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        112,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json;\nconst eventId = String(input.event_id || `APPLICATION_EVENT_${Date.now()}`);\nconst correlationId = String(input.correlation_id || `COR-${new Date().toISOString().slice(0,10).replaceAll('-','')}-${Date.now()}`);\nconst email = String(input.email || '').trim().toLowerCase();\nconst phone = String(input.phone || '').trim();\nconst normalizedEmail = email;\nconst normalizedPhone = phone.replace(/[^0-9+]/g, '');\nconst candidateCode = `CAN-${new Date().getUTCFullYear()}-${Math.abs([...normalizedEmail].reduce((a,c) => a + c.charCodeAt(0), 0)).toString().slice(-6)}`;\nconst applicationCode = `APP-${new Date().getUTCFullYear()}-${eventId.replace(/[^a-zA-Z0-9]/g, '').slice(-10)}`;\nconst positionIds = {\"Python Developer\":\"45cb1750-ee09-4fad-9a23-21701bf0e422\",\"Business Development Executive\":\"2834258a-6d99-43ee-b54a-79aa3fe2ffeb\",\"QA Engineer\":\"0ce9d819-1bbd-474e-b06a-5817b246803c\"}; input.job_position_id = positionIds[input.position];\nreturn [{ json: { ...input, event_id: eventId, correlation_id: correlationId, normalized_email: normalizedEmail, normalized_phone: normalizedPhone, candidate_code: candidateCode, application_code: applicationCode, processing_status: 'READY_FOR_PERSISTENCE' } }];"
+      },
+      "id": "84f0c773-d7ba-4f99-8ac2-a1f0a04d6136",
+      "name": "Build Candidate Persistence Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        272,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "applications",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "application_code",
+              "fieldValue": "={{ $json.application_code }}"
+            },
+            {
+              "fieldId": "candidate_id",
+              "fieldValue": "={{ $json.candidate_id }}"
+            },
+            {
+              "fieldId": "correlation_id",
+              "fieldValue": "={{ $json.correlation_id }}"
+            },
+            {
+              "fieldId": "event_id",
+              "fieldValue": "={{ $json.event_id }}"
+            },
+            {
+              "fieldId": "name_at_application",
+              "fieldValue": "={{ $json.name }}"
+            },
+            {
+              "fieldId": "email_at_application",
+              "fieldValue": "={{ $json.email }}"
+            },
+            {
+              "fieldId": "phone_at_application",
+              "fieldValue": "={{ $json.phone }}"
+            },
+            {
+              "fieldId": "experience_years",
+              "fieldValue": "={{ $json.experience_years }}"
+            },
+            {
+              "fieldId": "skills",
+              "fieldValue": "={{ JSON.stringify($json.skills) }}"
+            },
+            {
+              "fieldId": "expected_salary",
+              "fieldValue": "={{ $json.expected_salary }}"
+            },
+            {
+              "fieldId": "currency",
+              "fieldValue": "={{ $json.currency }}"
+            },
+            {
+              "fieldId": "joining_date",
+              "fieldValue": "={{ $json.joining_date }}"
+            },
+            {
+              "fieldId": "cv_url",
+              "fieldValue": "={{ $json.cv_url }}"
+            },
+            {
+              "fieldId": "cv_present",
+              "fieldValue": "={{ $json.cv_present }}"
+            },
+            {
+              "fieldId": "source",
+              "fieldValue": "={{ $json.source }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "NEW"
+            },
+            {
+              "fieldId": "job_position_id",
+              "fieldValue": "={{ $json.job_position_id }}"
+            }
+          ]
+        }
+      },
+      "id": "24d82f52-26c5-43d7-a94e-d6bad03cc756",
+      "name": "Create Application",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1184,
+        0
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all();"
+      },
+      "id": "90c80398-da75-4f8c-a943-6c3040c69fbe",
+      "name": "Return Processing Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1552,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "YF26BvWhMWSSLTOc",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/YF26BvWhMWSSLTOc",
+          "cachedResultName": "WF-03 - Scoring and AI Review"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1360,
+        0
+      ],
+      "id": "5e43c553-f8c7-4462-8647-2c853e28c791",
+      "name": "Call 'WF-03 - Scoring and AI Review'"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "candidates",
+        "limit": 1,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "normalized_email",
+              "condition": "eq",
+              "keyValue": "={{ $json.normalized_email }}"
+            },
+            {
+              "keyName": "normalized_phone",
+              "condition": "eq",
+              "keyValue": "={{ $json.normalized_phone }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        448,
+        0
+      ],
+      "id": "9f665c9f-5953-4ba0-96dc-005ef3809887",
+      "name": "Find existing canidates",
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "tableId": "candidates",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "candidate_code",
+              "fieldValue": "={{ $('Build Candidate Persistence Data').first().json.candidate_code }}"
+            },
+            {
+              "fieldId": "full_name",
+              "fieldValue": "={{ $('Build Candidate Persistence Data').first().json.name }}\n"
+            },
+            {
+              "fieldId": "normalized_name",
+              "fieldValue": "={{ $('Build Candidate Persistence Data').first().json.name.toLowerCase() }}"
+            },
+            {
+              "fieldId": "email",
+              "fieldValue": "={{ $('Build Candidate Persistence Data').first().json.email }}"
+            },
+            {
+              "fieldId": "normalized_email",
+              "fieldValue": "={{ $('Build Candidate Persistence Data').first().json.normalized_email }}"
+            },
+            {
+              "fieldId": "phone",
+              "fieldValue": "={{ $('Build Candidate Persistence Data').first().json.phone }}"
+            },
+            {
+              "fieldId": "normalized_phone",
+              "fieldValue": "={{ $('Build Candidate Persistence Data').first().json.phone }}"
+            }
+          ]
+        }
+      },
+      "id": "1a032bf1-4b7d-4bc4-a7aa-36a69728bed9",
+      "name": "Create Candidate",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        800,
+        96
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "f5d4d865-ac80-4d59-969a-8b6ff4be40f4",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        608,
+        0
+      ],
+      "id": "cd8a7071-f231-4a15-95a1-1cea0480df45",
+      "name": "Canidate found"
+    },
+    {
+      "parameters": {
+        "jsCode": "const candidate = $json;\nconst source = $('Build Candidate Persistence Data').first().json;\n\nreturn [{\n  json: {\n    ...source,\n    candidate_id: candidate.id,\n    persistence_status: \"CANDIDATE_CREATED\"\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1008,
+        0
+      ],
+      "id": "e52ac0f3-7a04-42ad-bf32-eb38dfa7a7ed",
+      "name": "Attach Canidate ID"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "candidates",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "full_name",
+              "fieldValue": "={{ $('Build Candidate Persistence Data').first().json.name }}"
+            },
+            {
+              "fieldId": "normalized_name",
+              "fieldValue": "={{ $('Build Candidate Persistence Data').first().json.name.toLowerCase() }}"
+            },
+            {
+              "fieldId": "email",
+              "fieldValue": "={{ $('Build Candidate Persistence Data').first().json.email }}"
+            },
+            {
+              "fieldId": "normalized_email",
+              "fieldValue": "={{ $('Build Candidate Persistence Data').first().json.normalized_email }}"
+            },
+            {
+              "fieldId": "phone",
+              "fieldValue": "={{ $('Build Candidate Persistence Data').first().json.phone }}"
+            },
+            {
+              "fieldId": "normalized_phone",
+              "fieldValue": "={{ $('Build Candidate Persistence Data').first().json.normalized_phone }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        800,
+        -80
+      ],
+      "id": "8084811c-c93b-4a0c-801b-a85a2caa5822",
+      "name": "Update Canidate",
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Start Candidate Processing": {
+      "main": [
+        [
+          {
+            "node": "Build Candidate Persistence Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Candidate Persistence Data": {
+      "main": [
+        [
+          {
+            "node": "Find existing canidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Application": {
+      "main": [
+        [
+          {
+            "node": "Call 'WF-03 - Scoring and AI Review'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'WF-03 - Scoring and AI Review'": {
+      "main": [
+        [
+          {
+            "node": "Return Processing Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find existing canidates": {
+      "main": [
+        [
+          {
+            "node": "Canidate found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Candidate": {
+      "main": [
+        [
+          {
+            "node": "Attach Canidate ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Canidate found": {
+      "main": [
+        [
+          {
+            "node": "Update Canidate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Candidate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach Canidate ID": {
+      "main": [
+        [
+          {
+            "node": "Create Application",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Canidate": {
+      "main": [
+        [
+          {
+            "node": "Attach Canidate ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "4a6348a4-5097-4b3d-b3c6-4d608d277600",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "8e5636d4ea21301bcee3485dafe413395d732724aaa50aa177880d363fc8d1a9"
+  },
+  "nodeGroups": [],
+  "id": "EwZrwzrTOLJKMxbI",
+  "tags": []
+}

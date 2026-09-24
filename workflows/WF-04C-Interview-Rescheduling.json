@@ -1,0 +1,397 @@
+{
+  "name": "WF-04C - Interview Rescheduling",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "novatech/interviews/reschedule",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "bef964fb-7d4d-46f5-945e-47c492848159",
+      "name": "Receive Reschedule Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1152,
+        96
+      ],
+      "webhookId": "f6011234-5678-4a90-8b12-420000000002"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nconst token = String(body.confirmation_token || '').trim();\nconst start = new Date(body.scheduled_start || '');\nconst end = body.scheduled_end ? new Date(body.scheduled_end) : new Date(start.getTime() + 60 * 60 * 1000);\nconst errors = [];\nif (!token) errors.push('confirmation_token is required');\nif (Number.isNaN(start.getTime())) errors.push('scheduled_start must be a valid ISO date');\nif (!Number.isNaN(start.getTime()) && start.getTime() <= Date.now()) errors.push('scheduled_start must be in the future');\nif (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime()) && end <= start) errors.push('scheduled_end must be after scheduled_start');\nreturn [{ json: { confirmation_token: token, scheduled_start: Number.isNaN(start.getTime()) ? null : start.toISOString(), scheduled_end: Number.isNaN(end.getTime()) ? null : end.toISOString(), meeting_url: body.meeting_url || null, request_valid: errors.length === 0, validation_errors: errors } }];"
+      },
+      "id": "a01e1e4b-5caf-4923-9d25-0e1e5ea2fbaa",
+      "name": "Validate Reschedule Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -912,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "f6011234-5678-4a90-8b12-420000000004",
+              "leftValue": "={{ $json.request_valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4baa978d-46f7-4e97-a3c8-c9f1ee93a499",
+      "name": "Valid Reschedule Request?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -672,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "interviews",
+        "limit": 1,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "confirmation_token",
+              "condition": "eq",
+              "keyValue": "={{ $json.confirmation_token }}"
+            }
+          ]
+        }
+      },
+      "id": "cbd0fc7f-e33b-4b2b-b5a9-ad5db980dcc3",
+      "name": "Find Interview for Reschedule",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -416,
+        16
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "f6011234-5678-4a90-8b12-420000000007",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "57c7b925-a792-47e8-89cb-890d7ee462d6",
+      "name": "Interview Available?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -176,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const interview = $json;\nconst request = $('Validate Reschedule Request').first().json;\nreturn [{ json: { ...interview, new_scheduled_start: request.scheduled_start, new_scheduled_end: request.scheduled_end, new_meeting_url: request.meeting_url || interview.meeting_url || null } }];"
+      },
+      "id": "983632d6-117c-4040-8e83-ca7c807c17b7",
+      "name": "Prepare Reschedule Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        64,
+        -64
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "interviews",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "scheduled_start",
+              "fieldValue": "={{ $json.new_scheduled_start }}"
+            },
+            {
+              "fieldId": "scheduled_end",
+              "fieldValue": "={{ $json.new_scheduled_end }}"
+            },
+            {
+              "fieldId": "meeting_url",
+              "fieldValue": "={{ $json.new_meeting_url }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "PENDING_CONFIRMATION"
+            },
+            {
+              "fieldId": "reminder_count",
+              "fieldValue": "0"
+            }
+          ]
+        }
+      },
+      "id": "a062a5c2-1347-46ee-b9a4-ddbec8232c69",
+      "name": "Update Rescheduled Interview",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        320,
+        -64
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const updated = $json;\nconst source = $('Prepare Reschedule Update').first().json;\nreturn [{ json: { success: true, interview_id: updated.id || source.id, interview_code: updated.interview_code || source.interview_code, application_id: updated.application_id || source.application_id, scheduled_start: updated.scheduled_start || source.new_scheduled_start, scheduled_end: updated.scheduled_end || source.new_scheduled_end, meeting_url: updated.meeting_url || source.new_meeting_url, interview_status: 'PENDING_CONFIRMATION', display_status: 'Interview Rescheduled - Confirmation Pending', message: 'The interview has been rescheduled. Please confirm the new time.' } }];"
+      },
+      "id": "ff9049e0-87f0-4072-a14a-989b4271c365",
+      "name": "Prepare Reschedule Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        -64
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { success: false, display_status: 'Interview Not Found', message: 'The confirmation token is invalid or expired.' } }];"
+      },
+      "id": "c7935a47-f061-4e32-b9d3-11714e8b6082",
+      "name": "Prepare Reschedule Not Found",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        64,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { success: false, display_status: 'Invalid Reschedule Request', message: 'The reschedule request could not be processed.', validation_errors: $json.validation_errors || [] } }];"
+      },
+      "id": "881f5d72-3f96-4ca4-ae61-9ef308e2f00d",
+      "name": "Prepare Invalid Reschedule",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -416,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "51386e29-d243-44c7-ba3b-51cb717f4164",
+      "name": "Return Reschedule Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        784,
+        256
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Receive Reschedule Request": {
+      "main": [
+        [
+          {
+            "node": "Validate Reschedule Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Reschedule Request": {
+      "main": [
+        [
+          {
+            "node": "Valid Reschedule Request?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid Reschedule Request?": {
+      "main": [
+        [
+          {
+            "node": "Find Interview for Reschedule",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Invalid Reschedule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Interview for Reschedule": {
+      "main": [
+        [
+          {
+            "node": "Interview Available?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Interview Available?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Reschedule Update",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Reschedule Not Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Reschedule Update": {
+      "main": [
+        [
+          {
+            "node": "Update Rescheduled Interview",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Rescheduled Interview": {
+      "main": [
+        [
+          {
+            "node": "Prepare Reschedule Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Reschedule Success": {
+      "main": [
+        [
+          {
+            "node": "Return Reschedule Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Reschedule Not Found": {
+      "main": [
+        [
+          {
+            "node": "Return Reschedule Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Invalid Reschedule": {
+      "main": [
+        [
+          {
+            "node": "Return Reschedule Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "6fbd499f-cbeb-439d-b2be-40c874ff87bf",
+  "meta": {
+    "instanceId": "8e5636d4ea21301bcee3485dafe413395d732724aaa50aa177880d363fc8d1a9"
+  },
+  "nodeGroups": [],
+  "id": "YiRJ7xH0inmItw11",
+  "tags": []
+}

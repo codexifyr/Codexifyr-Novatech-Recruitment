@@ -1,0 +1,279 @@
+{
+  "name": "WF-04D - Interview Reminders",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours"
+            }
+          ]
+        }
+      },
+      "id": "1184a4dc-385e-48dd-b0db-dc8787604012",
+      "name": "Hourly Reminder Check",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "652cc991-4f7f-4239-80f0-34e24bc14e96",
+      "name": "Manual Reminder Test",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "interview_reminder_queue",
+        "returnAll": true,
+        "matchType": "allFilters"
+      },
+      "id": "50a4dc63-b30e-4088-b4c1-1020d8ada008",
+      "name": "Load Interview Reminder Queue",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        272,
+        80
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\n// Manual testing mein pehla available record force-send hoga\nconst isManualTest = $('Manual Reminder Test').isExecuted;\n\nif (isManualTest) {\n  if (items.length === 0) {\n    throw new Error('Reminder queue mein testing ke liye koi interview record nahi mila.');\n  }\n\n  return [{\n    json: {\n      ...items[0].json,\n      reminder_due: true,\n      test_mode: true\n    }\n  }];\n}\n\n// Hourly production execution ke asli rules\nconst now = Date.now();\nconst next24Hours = now + (24 * 60 * 60 * 1000);\nconst twelveHoursAgo = now - (12 * 60 * 60 * 1000);\n\nreturn items\n  .filter(item => {\n    const row = item.json;\n    const start = new Date(row.scheduled_start).getTime();\n    const lastReminder = row.last_reminder_at\n      ? new Date(row.last_reminder_at).getTime()\n      : null;\n\n    return (\n      start > now &&\n      start <= next24Hours &&\n      Number(row.reminder_count || 0) < 2 &&\n      (!lastReminder || lastReminder <= twelveHoursAgo)\n    );\n  })\n  .map(item => ({\n    json: {\n      ...item.json,\n      reminder_due: true,\n      test_mode: false\n    }\n  }));"
+      },
+      "id": "ac598927-a960-4a77-927d-207c83fb24de",
+      "name": "Select Due Reminders",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $json;\nconst start = new Date(row.scheduled_start);\nconst end = new Date(row.scheduled_end);\nconst format = date => date.toISOString().replace('T', ' ').replace('.000Z', ' UTC').replace('Z', ' UTC');\nconst meetingText = row.meeting_url ? `Meeting link: ${row.meeting_url}` : 'Meeting link will be shared by the hiring team.';\nreturn [{ json: { ...row, email_to: row.candidate_email, email_subject: `Interview reminder - ${row.position_title}`, email_message: `Hello ${row.candidate_name},\\n\\nThis is a reminder for your ${row.position_title} interview.\\n\\nStart: ${format(start)}\\nEnd: ${format(end)}\\n${meetingText}\\n\\nInterview code: ${row.interview_code}\\nStatus: ${row.interview_status}\\n\\nRegards,\\nNovaTech Solutions Recruitment Team`, new_reminder_count: Number(row.reminder_count || 0) + 1, reminder_sent_at: new Date().toISOString() } }];"
+      },
+      "id": "fb4984eb-bd08-42c1-b13a-040fa4ae1bb6",
+      "name": "Prepare Reminder Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        768,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.candidate_email }}",
+        "subject": "=Interview Reminder - {{ $json.interview_code }}",
+        "emailType": "text",
+        "message": "=Hello {{ $json.candidate_name }},\n\nThis is a reminder that your interview is scheduled for {{ $json.scheduled_start }}.\n\nInterview Code: {{ $json.interview_code }}\n\nPlease join using this link:\n{{ $json.meeting_url }}\n\nRegards,\nNovaTech Hiring Team",
+        "options": {}
+      },
+      "id": "8075b53e-2136-4097-8f9c-d4b44cb78d04",
+      "name": "Send Interview Reminder Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1024,
+        80
+      ],
+      "webhookId": "a67580f3-827a-4e1a-a7b3-88df9a17955b",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "rDJCSu8S6yHLuaYR",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('Prepare Reminder Email').item.json;\nreturn [{ json: { ...source, email_sent: true } }];"
+      },
+      "id": "0d8e19f3-7f9b-42a0-8ee7-141936a40683",
+      "name": "Prepare Reminder Log Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1264,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "interviews",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.interview_id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "reminder_count",
+              "fieldValue": "={{ $json.new_reminder_count }}"
+            },
+            {
+              "fieldId": "last_reminder_at",
+              "fieldValue": "={{ $json.reminder_sent_at }}"
+            }
+          ]
+        }
+      },
+      "id": "a7c1316b-3169-4b47-89aa-a28858b6ac50",
+      "name": "Update Interview Reminder Log",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1520,
+        80
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('Prepare Reminder Log Update').item.json;\nreturn [{ json: { success: true, interview_id: source.interview_id, interview_code: source.interview_code, candidate_email: source.candidate_email, reminder_count: source.new_reminder_count, last_reminder_at: source.reminder_sent_at, display_status: 'Interview Reminder Sent' } }];"
+      },
+      "id": "4ae61006-7b19-46df-86bc-17b88b119a7a",
+      "name": "Return Reminder Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        80
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Hourly Reminder Check": {
+      "main": [
+        [
+          {
+            "node": "Load Interview Reminder Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Reminder Test": {
+      "main": [
+        [
+          {
+            "node": "Load Interview Reminder Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Interview Reminder Queue": {
+      "main": [
+        [
+          {
+            "node": "Select Due Reminders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Due Reminders": {
+      "main": [
+        [
+          {
+            "node": "Prepare Reminder Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Reminder Email": {
+      "main": [
+        [
+          {
+            "node": "Send Interview Reminder Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Interview Reminder Email": {
+      "main": [
+        [
+          {
+            "node": "Prepare Reminder Log Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Reminder Log Update": {
+      "main": [
+        [
+          {
+            "node": "Update Interview Reminder Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Interview Reminder Log": {
+      "main": [
+        [
+          {
+            "node": "Return Reminder Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "8332156f-0a2f-42d4-a775-7a66db596d49",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "8e5636d4ea21301bcee3485dafe413395d732724aaa50aa177880d363fc8d1a9"
+  },
+  "nodeGroups": [],
+  "id": "NagZyhp4oQF88clX",
+  "tags": []
+}

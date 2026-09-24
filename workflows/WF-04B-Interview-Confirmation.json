@@ -1,0 +1,357 @@
+{
+  "name": "WF-04B - Interview Confirmation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "novatech/interviews/confirm",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "cee5269c-315e-40c4-81fc-d5110f43d5c6",
+      "name": "Receive Interview Confirmation",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1136,
+        80
+      ],
+      "webhookId": "e5f60112-3456-4a78-8b90-410000000002"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nconst token = String(body.confirmation_token || '').trim();\nconst action = String(body.action || 'CONFIRM').trim().toUpperCase();\nconst errors = [];\nif (!token) errors.push('confirmation_token is required');\nif (!['CONFIRM'].includes(action)) errors.push('Only CONFIRM is supported by this endpoint');\nreturn [{ json: { confirmation_token: token, action, request_valid: errors.length === 0, validation_errors: errors, received_at: new Date().toISOString() } }];"
+      },
+      "id": "870a6816-fcd5-4014-aa8a-6055891d6bf0",
+      "name": "Validate Confirmation Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -896,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "e5f60112-3456-4a78-8b90-410000000004",
+              "leftValue": "={{ $json.request_valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b14b6900-efbf-469a-9870-614336ee11a6",
+      "name": "Valid Confirmation Request?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -656,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "interviews",
+        "limit": 1,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "confirmation_token",
+              "condition": "eq",
+              "keyValue": "={{ $json.confirmation_token }}"
+            }
+          ]
+        }
+      },
+      "id": "9936faa3-eee5-4590-ab98-b8003a929abc",
+      "name": "Find Interview by Token",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        0
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "e5f60112-3456-4a78-8b90-410000000007",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "033ddbec-b03d-4650-9081-68bef4da8fc6",
+      "name": "Interview Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -160,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "interviews",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "CONFIRMED"
+            }
+          ]
+        }
+      },
+      "id": "f0ced7dd-ff7e-403e-9415-4b8e1f6ea196",
+      "name": "Confirm Interview",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        80,
+        -80
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const interview = $json;\nconst original = $('Find Interview by Token').first().json;\nreturn [{ json: { success: true, interview_id: interview.id || original.id, interview_code: interview.interview_code || original.interview_code, application_id: interview.application_id || original.application_id, scheduled_start: interview.scheduled_start || original.scheduled_start, scheduled_end: interview.scheduled_end || original.scheduled_end, meeting_url: interview.meeting_url || original.meeting_url, interview_status: 'CONFIRMED', display_status: 'Interview Confirmed', message: 'Your interview has been confirmed successfully.' } }];"
+      },
+      "id": "d0fb3ef8-a0b9-47b7-a7d8-45bcd0d76622",
+      "name": "Prepare Confirmation Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const request = $('Validate Confirmation Request').first().json;\nreturn [{ json: { success: false, interview_status: 'NOT_FOUND', display_status: 'Interview Not Found', message: 'The confirmation token is invalid or expired.', validation_errors: request.validation_errors || [] } }];"
+      },
+      "id": "f5f10241-3aae-4c0f-a6f5-df78b80d4e2d",
+      "name": "Prepare Interview Not Found",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        96,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { success: false, interview_status: 'INVALID_REQUEST', display_status: 'Invalid Confirmation Request', message: 'Confirmation request could not be processed.', validation_errors: $json.validation_errors || [] } }];"
+      },
+      "id": "178553e3-2691-4eda-ae7f-cd588d77b1b6",
+      "name": "Prepare Invalid Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "db33024c-3476-4922-9b4f-cd1bb11a4891",
+      "name": "Return Confirmation Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        432,
+        288
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Receive Interview Confirmation": {
+      "main": [
+        [
+          {
+            "node": "Validate Confirmation Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Confirmation Request": {
+      "main": [
+        [
+          {
+            "node": "Valid Confirmation Request?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid Confirmation Request?": {
+      "main": [
+        [
+          {
+            "node": "Find Interview by Token",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Invalid Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Interview by Token": {
+      "main": [
+        [
+          {
+            "node": "Interview Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Interview Found?": {
+      "main": [
+        [
+          {
+            "node": "Confirm Interview",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Interview Not Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirm Interview": {
+      "main": [
+        [
+          {
+            "node": "Prepare Confirmation Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Confirmation Success": {
+      "main": [
+        [
+          {
+            "node": "Return Confirmation Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Interview Not Found": {
+      "main": [
+        [
+          {
+            "node": "Return Confirmation Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Invalid Request": {
+      "main": [
+        [
+          {
+            "node": "Return Confirmation Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "04e3cb39-c3ee-4757-b006-136d2d0f9f05",
+  "meta": {
+    "instanceId": "8e5636d4ea21301bcee3485dafe413395d732724aaa50aa177880d363fc8d1a9"
+  },
+  "nodeGroups": [],
+  "id": "snHZnjCWHD4lkvLL",
+  "tags": []
+}

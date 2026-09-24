@@ -1,0 +1,744 @@
+{
+  "name": "WF-06 - Employee Onboarding",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "novatech/onboarding/start",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "c93290a8-62ac-4f0f-920f-ee4d5c90d30b",
+      "name": "Receive Accepted Offer",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -2000,
+        -128
+      ],
+      "webhookId": "f6000000-0000-4a00-8000-000000000002"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nconst offerId = String(body.offer_id || '').trim();\nconst uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\nconst errors = [];\nif (!uuidPattern.test(offerId)) errors.push('A valid offer_id is required');\nreturn [{ json: { offer_id: offerId, request_valid: errors.length === 0, validation_errors: errors, received_at: new Date().toISOString() } }];"
+      },
+      "id": "09705d3d-909d-4bfc-b0c7-bd925477cc71",
+      "name": "Validate Onboarding Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1760,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "offers",
+        "limit": 1,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.offer_id }}"
+            }
+          ]
+        }
+      },
+      "id": "92f08f7e-0bde-4263-85ec-7fed3690f841",
+      "name": "Load Accepted Offer",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1520,
+        -128
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "f6000000-0000-4a00-8000-000000000005",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "ACCEPTED",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "286b3350-c8a4-4649-9f4e-4fc904629e5f",
+      "name": "Offer Accepted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1280,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "applications",
+        "limit": 1,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.application_id }}"
+            }
+          ]
+        }
+      },
+      "id": "767df6fd-dcd1-4e94-9fe5-90fb9901d053",
+      "name": "Load Accepted Application",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1040,
+        -208
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "job_positions",
+        "limit": 1,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.job_position_id }}"
+            }
+          ]
+        }
+      },
+      "id": "f095af13-90e6-4ccc-a3e5-1865274c16cb",
+      "name": "Load Employee Department",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        -208
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "employees",
+        "limit": 1,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "application_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Load Accepted Application').first().json.id }}"
+            }
+          ]
+        }
+      },
+      "id": "70c5353d-44e7-4f4b-a7c4-08ddf4eb10ea",
+      "name": "Find Existing Employee",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -560,
+        -208
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "f6000000-0000-4a00-8000-000000000010",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5607465f-0a5d-4d78-953e-fdc33b7fb4da",
+      "name": "Employee Already Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -320,
+        -208
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const offer = $('Load Accepted Offer').first().json;\nconst application = $('Load Accepted Application').first().json;\nconst position = $('Load Employee Department').first().json;\nconst suffix = `${Date.now()}${Math.random().toString(36).slice(2, 8)}`;\nreturn [{ json: { employee_code: `EMP-${new Date().getUTCFullYear()}-${suffix.slice(-8)}`, candidate_id: application.candidate_id, application_id: application.id, offer_id: offer.id, offer_code: offer.offer_code, candidate_name: application.name_at_application, candidate_email: application.email_at_application, department: position.department || 'General', manager_id: offer.reporting_manager_id || null, start_date: offer.joining_date, employee_status: 'ONBOARDING' } }];"
+      },
+      "id": "4972ef6a-2f01-435d-8335-aad3e88a4b51",
+      "name": "Prepare Employee Record",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "employees",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "employee_code",
+              "fieldValue": "={{ $json.employee_code }}"
+            },
+            {
+              "fieldId": "candidate_id",
+              "fieldValue": "={{ $json.candidate_id }}"
+            },
+            {
+              "fieldId": "application_id",
+              "fieldValue": "={{ $json.application_id }}"
+            },
+            {
+              "fieldId": "department",
+              "fieldValue": "={{ $json.department }}"
+            },
+            {
+              "fieldId": "manager_id",
+              "fieldValue": "={{ $json.manager_id }}"
+            },
+            {
+              "fieldId": "start_date",
+              "fieldValue": "={{ $json.start_date }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "ONBOARDING"
+            }
+          ]
+        }
+      },
+      "id": "c8bdbe55-e1d2-4bca-8156-97ed11bb81d1",
+      "name": "Create Employee",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        160,
+        -128
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const employee = $json;\nconst source = $('Prepare Employee Record').first().json;\nreturn [{ json: { ...source, employee_id: employee.id, employee_code: employee.employee_code || source.employee_code, employee_status: employee.status || source.employee_status } }];"
+      },
+      "id": "469ff002-6d4d-439d-ae60-c3157f6453b6",
+      "name": "Attach Employee ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const employee = $json;\nconst start = new Date(`${employee.start_date}T00:00:00.000Z`);\nconst due = days => { const d = new Date(start); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };\nconst tasks = [\n  { task_key: 'DOCUMENTS', title: 'Submit employment documents', description: 'Submit identity, education, and previous-employment documents.', owner_role: 'candidate', due_date: due(-3) },\n  { task_key: 'IT_ACCOUNT', title: 'Create company accounts', description: 'Create company email and required system accounts.', owner_role: 'admin', due_date: due(-2) },\n  { task_key: 'EQUIPMENT', title: 'Prepare work equipment', description: 'Allocate laptop and required accessories.', owner_role: 'admin', due_date: due(-1) },\n  { task_key: 'ORIENTATION', title: 'Attend employee orientation', description: 'Complete the NovaTech employee orientation session.', owner_role: 'candidate', due_date: due(0) },\n  { task_key: 'POLICY_ACK', title: 'Acknowledge company policies', description: 'Review and acknowledge company policies.', owner_role: 'candidate', due_date: due(2) }\n];\nreturn tasks.map(task => ({ json: { employee_id: employee.employee_id, ...task, status: 'PENDING' } }));"
+      },
+      "id": "88c70730-216e-414f-9e4b-bbd388f1bbad",
+      "name": "Prepare Standard Onboarding Tasks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "onboarding_tasks",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "employee_id",
+              "fieldValue": "={{ $json.employee_id }}"
+            },
+            {
+              "fieldId": "task_key",
+              "fieldValue": "={{ $json.task_key }}"
+            },
+            {
+              "fieldId": "title",
+              "fieldValue": "={{ $json.title }}"
+            },
+            {
+              "fieldId": "description",
+              "fieldValue": "={{ $json.description }}"
+            },
+            {
+              "fieldId": "owner_role",
+              "fieldValue": "={{ $json.owner_role }}"
+            },
+            {
+              "fieldId": "due_date",
+              "fieldValue": "={{ $json.due_date }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "PENDING"
+            }
+          ]
+        }
+      },
+      "id": "e96546fe-9bcb-4476-8933-e1c1b9cd6f3e",
+      "name": "Create Onboarding Tasks",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        880,
+        -128
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const employee = $('Attach Employee ID').first().json;\nconst taskCount = $input.all().length;\nreturn [{ json: { ...employee, task_count: taskCount, email_to: employee.candidate_email, email_subject: `Welcome to NovaTech Solutions - ${employee.employee_code}`, email_message: `Hello ${employee.candidate_name},\n\nWelcome to NovaTech Solutions! Your employee onboarding has started.\n\nEmployee code: ${employee.employee_code}\nDepartment: ${employee.department}\nStart date: ${employee.start_date}\nOnboarding tasks created: ${taskCount}\n\nPlease sign in to the candidate/employee portal to complete your assigned tasks.\n\nRegards,\nNovaTech Solutions HR Team` } }];"
+      },
+      "id": "0b008e15-baa9-4180-930d-b3a7b3573ce7",
+      "name": "Prepare Welcome Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email_to }}",
+        "subject": "={{ $json.email_subject }}",
+        "message": "={{ $json.email_message }}",
+        "options": {}
+      },
+      "id": "7c7f3c99-99d6-4a31-b27e-44821cb60ddf",
+      "name": "Send Welcome Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1360,
+        -128
+      ],
+      "webhookId": "a03eb208-68a3-42d8-8dd1-722459ae8bbb",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "rDJCSu8S6yHLuaYR",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "applications",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Attach Employee ID').first().json.application_id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "ONBOARDING"
+            },
+            {
+              "fieldId": "status_reason",
+              "fieldValue": "Employee created and onboarding tasks assigned"
+            }
+          ]
+        }
+      },
+      "id": "da4c014b-b05f-44a3-a3f6-98755f75dee2",
+      "name": "Update Application Onboarding Status",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        -128
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('Prepare Welcome Email').first().json;\nreturn [{ json: { success: true, employee_created: true, employee_id: source.employee_id, employee_code: source.employee_code, application_id: source.application_id, candidate_id: source.candidate_id, department: source.department, start_date: source.start_date, employee_status: 'ONBOARDING', onboarding_task_count: source.task_count, welcome_email_sent: true, display_status: 'Employee Onboarding Started', admin_message: 'Employee record and standard onboarding tasks were created successfully.', next_workflow: 'WF-06 - Onboarding Task Tracking' } }];"
+      },
+      "id": "1bd63527-7028-49fa-98b0-6f367c98be22",
+      "name": "Prepare Onboarding Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1840,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const employee = $json;\nreturn [{ json: { success: true, employee_created: false, idempotent_result: true, employee_id: employee.id, employee_code: employee.employee_code, application_id: employee.application_id, candidate_id: employee.candidate_id, department: employee.department, start_date: employee.start_date, employee_status: employee.status, display_status: 'Existing Employee Returned', admin_message: 'An employee already exists for this application, so no duplicate employee or onboarding tasks were created.', next_workflow: 'WF-06 - Onboarding Task Tracking' } }];"
+      },
+      "id": "2f5d1047-fa01-4f24-a254-ff1237074215",
+      "name": "Prepare Existing Employee Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        -288
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const offer = $json;\nreturn [{ json: { success: false, employee_created: false, offer_id: offer.id || $('Validate Onboarding Request').first().json.offer_id, offer_status: offer.status || 'NOT_FOUND', display_status: 'Onboarding Blocked', admin_message: offer.id ? `Offer must be ACCEPTED before onboarding. Current status: ${offer.status}.` : 'Offer was not found.' } }];"
+      },
+      "id": "bda20e95-079a-45f5-aa57-2aeba40aac34",
+      "name": "Prepare Onboarding Blocked",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1040,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "f56b194c-fa9f-41d2-9fec-84eef3cad86b",
+      "name": "Return Onboarding Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        2048,
+        -128
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Receive Accepted Offer": {
+      "main": [
+        [
+          {
+            "node": "Validate Onboarding Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Onboarding Request": {
+      "main": [
+        [
+          {
+            "node": "Load Accepted Offer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Accepted Offer": {
+      "main": [
+        [
+          {
+            "node": "Offer Accepted?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Offer Accepted?": {
+      "main": [
+        [
+          {
+            "node": "Load Accepted Application",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Onboarding Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Accepted Application": {
+      "main": [
+        [
+          {
+            "node": "Load Employee Department",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Employee Department": {
+      "main": [
+        [
+          {
+            "node": "Find Existing Employee",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Existing Employee": {
+      "main": [
+        [
+          {
+            "node": "Employee Already Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Employee Already Exists?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Existing Employee Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Employee Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Employee Record": {
+      "main": [
+        [
+          {
+            "node": "Create Employee",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Employee": {
+      "main": [
+        [
+          {
+            "node": "Attach Employee ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach Employee ID": {
+      "main": [
+        [
+          {
+            "node": "Prepare Standard Onboarding Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Standard Onboarding Tasks": {
+      "main": [
+        [
+          {
+            "node": "Create Onboarding Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Onboarding Tasks": {
+      "main": [
+        [
+          {
+            "node": "Prepare Welcome Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Welcome Email": {
+      "main": [
+        [
+          {
+            "node": "Send Welcome Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Welcome Email": {
+      "main": [
+        [
+          {
+            "node": "Update Application Onboarding Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Application Onboarding Status": {
+      "main": [
+        [
+          {
+            "node": "Prepare Onboarding Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Onboarding Success": {
+      "main": [
+        [
+          {
+            "node": "Return Onboarding Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Existing Employee Result": {
+      "main": [
+        [
+          {
+            "node": "Return Onboarding Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Onboarding Blocked": {
+      "main": [
+        [
+          {
+            "node": "Return Onboarding Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "17a4e534-fab4-44d5-9b01-e59109145ae0",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "8e5636d4ea21301bcee3485dafe413395d732724aaa50aa177880d363fc8d1a9"
+  },
+  "nodeGroups": [],
+  "id": "f5ilaSuy3u3Yuwto",
+  "tags": []
+}

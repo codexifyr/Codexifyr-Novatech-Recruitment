@@ -1,0 +1,33 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+ADMIN_CREDENTIALS.md
+*.pem
+*.key
+
+# Dependencies and build output
+node_modules/
+.next/
+frontend/out/
+__pycache__/
+.pytest_cache/
+.venv/
+dist/
+build/
+.cache/
+
+# Local databases and runtime data
+*.sqlite
+*.sqlite3
+data/
+logs/
+
+# Operating system and editor files
+.DS_Store
+.vscode/settings.json
+.idea/
+
+# Generated evidence and temporary files
+tmp/
+*.log

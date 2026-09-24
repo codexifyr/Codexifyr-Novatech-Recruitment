@@ -1,0 +1,436 @@
+{
+  "name": "WF-03 - Scoring and AI Review",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "19df3d07-6fc0-4b80-909b-e246928f7d8b",
+      "name": "Start Scoring Review",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        224,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "applications",
+        "limit": 1,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        }
+      },
+      "id": "db85d7dc-9c98-4c1d-b8ae-188ef29490ba",
+      "name": "Load Application",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        400,
+        0
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const app = $json;\nconst input = $('Start Scoring Review').first().json;\nconst skills = Array.isArray(app.skills) ? app.skills : (typeof app.skills === 'string' ? JSON.parse(app.skills || '[]') : []);\nconst normalizedSkills = skills.map(s => String(s).toLowerCase());\nconst points = [];\nif (normalizedSkills.includes('python')) points.push(20);\nif (normalizedSkills.includes('fastapi') || normalizedSkills.includes('django')) points.push(15);\nif (normalizedSkills.includes('sql') || normalizedSkills.includes('postgresql')) points.push(10);\nif (normalizedSkills.includes('git')) points.push(5);\nif (normalizedSkills.includes('rest apis') || normalizedSkills.includes('api')) points.push(10);\nif (normalizedSkills.includes('docker')) points.push(10);\nif (normalizedSkills.includes('aws') || normalizedSkills.includes('azure')) points.push(10);\nif (normalizedSkills.includes('backend')) points.push(10);\nif (Number(app.experience_years || 0) >= 3) points.push(10);\nconst rawScore = points.reduce((sum, value) => sum + value, 0);\nconst ruleScore = Math.min(100, Math.round((rawScore / 60) * 100));\nconst status = ruleScore >= 80 ? 'SHORTLISTED' : (ruleScore >= 60 ? 'MANUAL_REVIEW' : 'REJECTED');\nconst reason = status === 'SHORTLISTED' ? 'Passed rule-based shortlist threshold' : (status === 'MANUAL_REVIEW' ? 'Requires hiring-team review' : 'Below shortlist threshold');\nconst review = { source: 'rules-only', score: ruleScore, recommendation: status, reason, generated_at: new Date().toISOString() };\nreturn [{ json: { application_id: app.id || input.application_id, application_code: app.application_code, correlation_id: app.correlation_id || input.correlation_id, event_id: app.event_id || input.event_id, rule_score: ruleScore, final_score: ruleScore, status, status_reason: reason, ai_review: review } }];"
+      },
+      "id": "e8ccceb0-82eb-4606-b6d6-c665ac5bf90e",
+      "name": "Calculate Score and Recommendation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        576,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "applications",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.application_id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "={{ $json.status }}"
+            },
+            {
+              "fieldId": "status_reason",
+              "fieldValue": "={{ $json.status_reason }}"
+            },
+            {
+              "fieldId": "rule_score",
+              "fieldValue": "={{ $json.rule_score }}"
+            },
+            {
+              "fieldId": "final_score",
+              "fieldValue": "={{ $json.final_score }}"
+            },
+            {
+              "fieldId": "ai_review",
+              "fieldValue": "={{ JSON.stringify($json.ai_review) }}"
+            }
+          ]
+        }
+      },
+      "id": "1a6dad54-2218-4fa0-89bb-bc32856401d6",
+      "name": "Update Application Review",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1312,
+        0
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $('Normalize AI Analysis').first().json;\n\nreturn [{\n  json: {\n    application_id: result.application_id,\n    candidate_id: $('Load Application').first().json.candidate_id,\n    application_code: result.application_code,\n    correlation_id: result.correlation_id,\n    event_id: result.event_id,\n    status: result.status,\n    rule_score: result.rule_score,\n    final_score: result.final_score,\n    status_reason: result.status_reason,\n    ai_analysis_status: result.ai_analysis_status,\n    ai_review: result.ai_review,\n    next_workflow:\n      result.status === 'SHORTLISTED'\n        ? 'WF-04 - Interview Scheduling'\n        : result.status === 'MANUAL_REVIEW'\n          ? 'ADMIN_MANUAL_REVIEW'\n          : 'PROCESS_COMPLETE',\n    review_source:\n      result.ai_analysis_status === 'COMPLETED'\n        ? 'RULES_AND_AI'\n        : 'RULES_WITH_AI_FALLBACK'\n  }\n}];"
+      },
+      "id": "b35b59f3-0f09-4c8b-9d91-800b5e0f0111",
+      "name": "Return Scoring Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1504,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "fVuAKOAu84TXsg62",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/fVuAKOAu84TXsg62",
+          "cachedResultName": "WF-04 - Interview Scheduling"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1920,
+        -96
+      ],
+      "id": "ec13612d-c127-4985-a3c1-ccdb0f288240",
+      "name": "Call 'WF-04 - Interview Scheduling'"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ `Analyze this candidate objectively for recruitment screening.\n\nApplication data:\n${JSON.stringify($('Load Application').first().json)}\n\nRule-based assessment:\n${JSON.stringify($('Calculate Score and Recommendation').first().json)}\n\nReturn ONLY valid JSON using exactly these field names:\n{\n  \"candidate_summary\": \"2 sentence professional candidate summary\",\n  \"strengths\": [\"specific strength 1\", \"specific strength 2\"],\n  \"skill_gaps\": [\"specific gap, or No significant gap identified\"],\n  \"risk_flags\": [\"specific risk, or No material risk identified\"],\n  \"ai_score\": 0,\n  \"ai_recommendation\": \"SHORTLISTED\",\n  \"ai_reasoning\": \"2 sentence hiring recommendation with evidence\"\n}\n\nRules:\n- ai_score must be an integer from 0 to 100.\n- ai_recommendation must be SHORTLISTED, MANUAL_REVIEW, or REJECTED.\n- Use only evidence present in the application.\n- Do not invent qualifications.\n- Do not return markdown or text outside the JSON.` }}",
+        "needsFallback": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        752,
+        0
+      ],
+      "id": "ee1478b6-5148-4ca6-a2c7-858ddaddcd23",
+      "name": "Candidate Analysis Agent",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.6-flash",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        640,
+        240
+      ],
+      "id": "665953d2-2022-4656-b3e4-68995a74773d",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "i0W1Ogr3ggos63Vg",
+          "name": "Google Gemini(PaLM) Api account 6"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-20b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        800,
+        240
+      ],
+      "id": "5b3e0ac7-f0dc-4d94-8a22-9601f4f4f057",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "DFCdHbzJkK05CNE3",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const scored = $('Calculate Score and Recommendation').first().json;\n\nlet analysis = $json.output ?? $json;\n\nif (typeof analysis === 'string') {\n  try {\n    analysis = JSON.parse(\n      analysis.replace(/```json|```/g, '').trim()\n    );\n  } catch {\n    analysis = null;\n  }\n}\n\nconst validRecommendations = [\n  'SHORTLISTED',\n  'MANUAL_REVIEW',\n  'REJECTED'\n];\n\nconst valid =\n  analysis &&\n  typeof analysis === 'object' &&\n  Number.isFinite(Number(analysis.ai_score)) &&\n  validRecommendations.includes(analysis.ai_recommendation);\n\nconst aiReview = valid\n  ? {\n      source: 'ai-agent',\n      provider_route: 'GEMINI_WITH_GROQ_FALLBACK',\n      candidate_summary: analysis.candidate_summary || analysis.summary || analysis.ai_reasoning || 'AI candidate assessment completed.',\n      strengths: Array.isArray(analysis.strengths)\n        ? analysis.strengths\n        : [],\n      skill_gaps: Array.isArray(analysis.skill_gaps)\n        ? analysis.skill_gaps\n        : [],\n      risk_flags: Array.isArray(analysis.risk_flags)\n        ? analysis.risk_flags\n        : [],\n      ai_score: Math.max(\n        0,\n        Math.min(100, Math.round(Number(analysis.ai_score)))\n      ),\n      ai_recommendation: analysis.ai_recommendation,\n      ai_reasoning: analysis.ai_reasoning || '',\n      generated_at: new Date().toISOString()\n    }\n  : {\n      source: 'rule-based-fallback',\n      provider_route: 'AI_UNAVAILABLE',\n      candidate_summary: '',\n      strengths: [],\n      skill_gaps: [],\n      risk_flags: ['AI analysis was unavailable'],\n      ai_score: scored.rule_score,\n      ai_recommendation: scored.status,\n      ai_reasoning: scored.status_reason,\n      generated_at: new Date().toISOString()\n    };\n\nreturn [{\n  json: {\n    ...scored,\n    ai_review: aiReview,\n    ai_analysis_status: valid\n      ? 'COMPLETED'\n      : 'RULE_BASED_FALLBACK'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        0
+      ],
+      "id": "f133c15d-6ee8-4498-9290-9a0039b5f828",
+      "name": "Normalize AI Analysis"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "c2d7a71d-7a0a-47ae-928b-ddbd44a985d2",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "SHORTLISTED",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1696,
+        0
+      ],
+      "id": "33ac17f0-fef6-471e-aa83-6e06c2774bc5",
+      "name": "Candidate Shortlisted?"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        112
+      ],
+      "id": "7a57d11e-8b53-4a1a-93cd-9881ddecc000",
+      "name": "Return Non-Shortlisted Result"
+    },
+    {
+      "parameters": {
+        "jsCode": "const scoring = $('Return Scoring Result').first().json;\nconst interview = $json;\n\nreturn [{\n  json: {\n    ...scoring,\n    ...interview,\n    ai_analysis_status: scoring.ai_analysis_status,\n    ai_review: scoring.ai_review,\n    review_source: scoring.review_source\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2144,
+        -96
+      ],
+      "id": "d2d9ce31-a595-4154-bff8-709656b27d31",
+      "name": "Return Shortlisted Result"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Start Scoring Review": {
+      "main": [
+        [
+          {
+            "node": "Load Application",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Application": {
+      "main": [
+        [
+          {
+            "node": "Calculate Score and Recommendation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Score and Recommendation": {
+      "main": [
+        [
+          {
+            "node": "Candidate Analysis Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Application Review": {
+      "main": [
+        [
+          {
+            "node": "Return Scoring Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Return Scoring Result": {
+      "main": [
+        [
+          {
+            "node": "Candidate Shortlisted?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Candidate Analysis Agent": {
+      "main": [
+        [
+          {
+            "node": "Normalize AI Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Normalize AI Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Candidate Analysis Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Candidate Analysis Agent",
+            "type": "ai_languageModel",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Normalize AI Analysis": {
+      "main": [
+        [
+          {
+            "node": "Update Application Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Candidate Shortlisted?": {
+      "main": [
+        [
+          {
+            "node": "Call 'WF-04 - Interview Scheduling'",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Non-Shortlisted Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'WF-04 - Interview Scheduling'": {
+      "main": [
+        [
+          {
+            "node": "Return Shortlisted Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "3d0426e1-d0cf-4b25-a6ac-3c04b54fc13b",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "8e5636d4ea21301bcee3485dafe413395d732724aaa50aa177880d363fc8d1a9"
+  },
+  "nodeGroups": [],
+  "id": "YF26BvWhMWSSLTOc",
+  "tags": []
+}

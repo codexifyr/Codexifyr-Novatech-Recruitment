@@ -1,0 +1,2 @@
+"""NovaTech recruitment API."""
+

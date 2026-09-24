@@ -1,0 +1,768 @@
+{
+  "name": "WF-05B - Offer Approval Decision",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "novatech/offers/approval",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "340fe9e8-ae7d-43c1-9e04-f09629c4c27b",
+      "name": "Receive Approval Decision",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1920,
+        352
+      ],
+      "webhookId": "f5020000-0000-4a00-8000-000000000002"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nconst offerId = String(body.offer_id || '').trim();\nconst approvalLevel = Number(body.approval_level);\nconst decision = String(body.decision || '').trim().toUpperCase();\nconst approverId = String(body.approver_id || '').trim();\nconst comments = String(body.comments || '').trim();\nconst uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\nconst errors = [];\nif (!uuidPattern.test(offerId)) errors.push('A valid offer_id is required');\nif (![1, 2].includes(approvalLevel)) errors.push('approval_level must be 1 or 2');\nif (!['APPROVED', 'REJECTED'].includes(decision)) errors.push('decision must be APPROVED or REJECTED');\nif (!uuidPattern.test(approverId)) errors.push('A valid approver_id is required');\nif (decision === 'REJECTED' && !comments) errors.push('comments are required when rejecting an offer');\nreturn [{ json: { offer_id: offerId, approval_level: approvalLevel, decision, approver_id: approverId, comments: comments || null, decided_at: new Date().toISOString(), request_valid: errors.length === 0, validation_errors: errors } }];"
+      },
+      "id": "9c1ebdbe-5e89-49c8-afd1-1f1718783811",
+      "name": "Validate Approval Decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1680,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "f5020000-0000-4a00-8000-000000000004",
+              "leftValue": "={{ $json.request_valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ed460af5-8951-4096-8fa9-a2fb14064dcb",
+      "name": "Valid Approval Request?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1440,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "offer_approvals",
+        "limit": 1,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "offer_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.offer_id }}"
+            },
+            {
+              "keyName": "approval_level",
+              "condition": "eq",
+              "keyValue": "={{ $json.approval_level }}"
+            }
+          ]
+        }
+      },
+      "id": "d6e8a8ae-15f2-489b-a353-430cc222c7ba",
+      "name": "Find Approval Record",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1200,
+        272
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "f5020000-0000-4a00-8000-000000000007",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d624ce8a-8791-477e-a974-701619da8ac7",
+      "name": "Approval Record Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -960,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "f5020000-0000-4a00-8000-000000000009",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "PENDING",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4b37de24-02d4-4a50-94a1-a854ee543bd2",
+      "name": "Approval Still Pending?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -720,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "offer_approvals",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "approver_id",
+              "fieldValue": "={{ $('Validate Approval Decision').first().json.approver_id }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "={{ $('Validate Approval Decision').first().json.decision }}"
+            },
+            {
+              "fieldId": "comments",
+              "fieldValue": "={{ $('Validate Approval Decision').first().json.comments }}"
+            },
+            {
+              "fieldId": "decided_at",
+              "fieldValue": "={{ $('Validate Approval Decision').first().json.decided_at }}"
+            }
+          ]
+        }
+      },
+      "id": "7f8a400a-0e2c-436a-ab6e-c1710d354282",
+      "name": "Record Approval Decision",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        112
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "f5020000-0000-4a00-8000-000000000012",
+              "leftValue": "={{ $('Validate Approval Decision').first().json.decision }}",
+              "rightValue": "REJECTED",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a4c30783-96dc-448b-8aa7-09bdcc0ed18c",
+      "name": "Offer Rejected?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -240,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "offers",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Validate Approval Decision').first().json.offer_id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "REJECTED"
+            },
+            {
+              "fieldId": "response_notes",
+              "fieldValue": "={{ $('Validate Approval Decision').first().json.comments }}"
+            }
+          ]
+        }
+      },
+      "id": "1fb1cb71-ef48-4f0f-ae56-080fd49eed64",
+      "name": "Mark Offer Rejected",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "offer_approvals",
+        "returnAll": true,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "offer_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Validate Approval Decision').first().json.offer_id }}"
+            }
+          ]
+        }
+      },
+      "id": "e5807011-04f6-495f-b1af-7cde6e9dcc9c",
+      "name": "Load All Offer Approvals",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        0,
+        192
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const approvals = $input.all().map(item => item.json);\nconst request = $('Validate Approval Decision').first().json;\nconst allApproved = approvals.length > 0 && approvals.every(row => row.status === 'APPROVED');\nconst pendingLevels = approvals.filter(row => row.status === 'PENDING').map(row => row.approval_level);\nreturn [{ json: { ...request, approval_count: approvals.length, all_approved: allApproved, pending_levels: pendingLevels } }];"
+      },
+      "id": "69c794eb-a78e-4511-817c-bea9abf96736",
+      "name": "Evaluate Approval Completion",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "f5020000-0000-4a00-8000-000000000017",
+              "leftValue": "={{ $json.all_approved }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4cda38ce-438b-4ad3-a3aa-281435f8b4c4",
+      "name": "All Approvals Complete?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "offers",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.offer_id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "APPROVED"
+            }
+          ]
+        }
+      },
+      "id": "5374c21e-fe90-4bce-a65a-7d240da6f931",
+      "name": "Mark Offer Approved",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        736,
+        0
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const request = $('Validate Approval Decision').first().json;\nreturn [{ json: { success: true, offer_id: request.offer_id, approval_level: request.approval_level, decision: 'APPROVED', offer_status: 'APPROVED', display_status: 'Offer Approved', admin_message: 'All required approval levels are complete. The offer is ready to be sent to the candidate.', next_workflow: 'WF-05C - Offer Delivery and Candidate Response' } }];"
+      },
+      "id": "ac8d1f7a-57f7-4340-a4ff-4f28f023da0e",
+      "name": "Prepare Fully Approved Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        976,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { success: true, offer_id: $json.offer_id, approval_level: $json.approval_level, decision: 'APPROVED', offer_status: 'PENDING_APPROVAL', pending_levels: $json.pending_levels, display_status: 'Additional Approval Required', admin_message: 'This approval was recorded. The offer is waiting for the remaining approval level(s).', next_workflow: 'WF-05B - Offer Approval Decision' } }];"
+      },
+      "id": "c2fa30d1-0d56-4e00-a862-a460ccb02a8b",
+      "name": "Prepare Approval Pending Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const request = $('Validate Approval Decision').first().json;\nreturn [{ json: { success: true, offer_id: request.offer_id, approval_level: request.approval_level, decision: 'REJECTED', offer_status: 'REJECTED', display_status: 'Offer Approval Rejected', admin_message: 'The offer was rejected by the approver and requires administrator review.', comments: request.comments, next_workflow: 'ADMIN_REVIEW' } }];"
+      },
+      "id": "0783a3a1-b462-4404-90ad-7148304ed8f2",
+      "name": "Prepare Rejected Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const approval = $json;\nreturn [{ json: { success: true, idempotent_result: true, offer_id: approval.offer_id, approval_level: approval.approval_level, decision: approval.status, display_status: 'Approval Already Recorded', admin_message: 'This approval level already has a decision, so it was not changed.' } }];"
+      },
+      "id": "b7330038-bf80-4379-8e62-f36cd544028b",
+      "name": "Prepare Existing Decision Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const request = $('Validate Approval Decision').first().json;\nreturn [{ json: { success: false, offer_id: request.offer_id, approval_level: request.approval_level, display_status: 'Approval Record Not Found', admin_message: 'No matching approval record was found for this offer and approval level.' } }];"
+      },
+      "id": "e51347a0-58f5-4567-868b-96993ffa030a",
+      "name": "Prepare Approval Not Found",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -736,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { success: false, display_status: 'Invalid Approval Request', admin_message: 'The approval decision could not be processed.', validation_errors: $json.validation_errors || [] } }];"
+      },
+      "id": "6a59801d-9fab-4015-8707-2f5461ac8794",
+      "name": "Prepare Invalid Approval Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1184,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "4fa84e6f-0cfa-4db6-af0d-7c450df6feb0",
+      "name": "Return Approval Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1200,
+        272
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Receive Approval Decision": {
+      "main": [
+        [
+          {
+            "node": "Validate Approval Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Approval Decision": {
+      "main": [
+        [
+          {
+            "node": "Valid Approval Request?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid Approval Request?": {
+      "main": [
+        [
+          {
+            "node": "Find Approval Record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Invalid Approval Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Approval Record": {
+      "main": [
+        [
+          {
+            "node": "Approval Record Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approval Record Found?": {
+      "main": [
+        [
+          {
+            "node": "Approval Still Pending?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Approval Not Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approval Still Pending?": {
+      "main": [
+        [
+          {
+            "node": "Record Approval Decision",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Existing Decision Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Approval Decision": {
+      "main": [
+        [
+          {
+            "node": "Offer Rejected?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Offer Rejected?": {
+      "main": [
+        [
+          {
+            "node": "Mark Offer Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Load All Offer Approvals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Offer Rejected": {
+      "main": [
+        [
+          {
+            "node": "Prepare Rejected Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load All Offer Approvals": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Approval Completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Approval Completion": {
+      "main": [
+        [
+          {
+            "node": "All Approvals Complete?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "All Approvals Complete?": {
+      "main": [
+        [
+          {
+            "node": "Mark Offer Approved",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Approval Pending Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Offer Approved": {
+      "main": [
+        [
+          {
+            "node": "Prepare Fully Approved Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Fully Approved Result": {
+      "main": [
+        [
+          {
+            "node": "Return Approval Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Approval Pending Result": {
+      "main": [
+        [
+          {
+            "node": "Return Approval Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Rejected Result": {
+      "main": [
+        [
+          {
+            "node": "Return Approval Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Existing Decision Result": {
+      "main": [
+        [
+          {
+            "node": "Return Approval Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Approval Not Found": {
+      "main": [
+        [
+          {
+            "node": "Return Approval Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Invalid Approval Result": {
+      "main": [
+        [
+          {
+            "node": "Return Approval Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "8926093e-27e9-4951-95b9-82bef143217d",
+  "meta": {
+    "instanceId": "8e5636d4ea21301bcee3485dafe413395d732724aaa50aa177880d363fc8d1a9"
+  },
+  "nodeGroups": [],
+  "id": "uRX3VbFHwD56NNYx",
+  "tags": []
+}

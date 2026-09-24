@@ -1,0 +1,54 @@
+"use client";
+
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { api } from "@/lib/api";
+
+type OfferStatus = "APPROVED" | "OFFERED" | "ACCEPTED" | "DECLINED" | "CANCELLED" | "EXPIRED" | "REJECTED" | "NEGOTIATION";
+type Offer = { id:string; offer_code:string; status:OfferStatus; salary:number; currency:string; joining_date:string; expiry_date:string; employment_title?:string; employment_level?:string; employment_type?:string; department?:string; document_storage_path?:string; sent_at?:string; candidate_responded_at?:string; response_notes?:string; applications?:{id:string;application_code:string;name_at_application:string;email_at_application:string;status:string;job_positions?:{title:string;department:string}} };
+type Eligible = { id:string;application_code:string;name_at_application:string;email_at_application:string;final_score?:number;job_positions?:{title:string;department:string;employment_type?:string;experience_level?:string} };
+type Metrics = Record<string, number>;
+
+const labels:Record<string,string>={APPROVED:"Ready to send",OFFERED:"Awaiting candidate",ACCEPTED:"Accepted",DECLINED:"Declined",CANCELLED:"Cancelled",EXPIRED:"Expired",REJECTED:"Rejected",NEGOTIATION:"Negotiation"};
+const when=(value?:string)=>value?new Date(value).toLocaleString():"—";
+
+export default function OffersPage(){
+ const [offers,setOffers]=useState<Offer[]>([]),[eligible,setEligible]=useState<Eligible[]>([]),[metrics,setMetrics]=useState<Metrics>({}),[selected,setSelected]=useState(""),[filter,setFilter]=useState("ALL"),[search,setSearch]=useState(""),[message,setMessage]=useState(""),[error,setError]=useState(""),[busy,setBusy]=useState("");
+ async function load(){try{const [pipeline,ready]=await Promise.all([api<{items:Offer[];metrics:Metrics}>("/admin/offers"),api<{items:Eligible[]}>("/admin/offers/eligible-applications")]);setOffers(pipeline.items);setMetrics(pipeline.metrics||{});setEligible(ready.items);setError("");}catch(reason){setError(reason instanceof Error?reason.message:"Offers could not load");}}
+ useEffect(()=>{void load();},[]);
+ const candidate=eligible.find(item=>item.id===selected);
+ const visible=useMemo(()=>offers.filter(offer=>{const text=`${offer.offer_code} ${offer.employment_title||""} ${offer.applications?.name_at_application||""} ${offer.applications?.email_at_application||""}`.toLowerCase();return(filter==="ALL"||offer.status===filter)&&text.includes(search.trim().toLowerCase());}),[offers,filter,search]);
+
+ async function create(event:FormEvent<HTMLFormElement>){event.preventDefault();const form=event.currentTarget,data=new FormData(form);setBusy("create");setError("");setMessage("");try{const result=await api<{message:string}>("/admin/offers",{method:"POST",body:JSON.stringify({application_id:data.get("application_id"),salary:Number(data.get("salary")),currency:data.get("currency"),joining_date:data.get("joining_date"),expiry_date:data.get("expiry_date"),probation_months:Number(data.get("probation_months")),approval_required_levels:1,employment_title:data.get("employment_title"),employment_level:data.get("employment_level"),employment_type:data.get("employment_type"),department:data.get("department")})});setMessage(result.message);setSelected("");form.reset();await load();}catch(reason){setError(reason instanceof Error?reason.message:"Offer could not be created or sent");await load();}finally{setBusy("");}}
+ async function document(offer:Offer){setBusy(`document-${offer.id}`);setError("");try{if(!offer.document_storage_path){const result=await api<{message:string}>(`/admin/offers/${offer.id}/document`,{method:"POST"});setMessage(result.message);await load();return;}const result=await api<{url:string}>(`/admin/offers/${offer.id}/document`);window.open(result.url,"_blank","noopener,noreferrer");}catch(reason){setError(reason instanceof Error?reason.message:"Offer document action failed");}finally{setBusy("");}}
+ async function resend(offer:Offer){if(!window.confirm(`Send offer ${offer.offer_code} to ${offer.applications?.email_at_application||"the candidate"}?`))return;setBusy(`send-${offer.id}`);setError("");setMessage("");try{const result=await api<{message:string}>(`/admin/offers/${offer.id}/send`,{method:"POST"});setMessage(result.message);await load();}catch(reason){setError(reason instanceof Error?reason.message:"Offer could not be sent");}finally{setBusy("");}}
+ async function cancel(offer:Offer){const reason=window.prompt("Reason for cancelling this offer:");if(!reason?.trim()||!window.confirm(`Cancel ${offer.offer_code}? Its secure response link will stop working.`))return;setBusy(`cancel-${offer.id}`);setError("");setMessage("");try{const result=await api<{message:string}>(`/admin/offers/${offer.id}/status`,{method:"PATCH",body:JSON.stringify({status:"CANCELLED",reason:reason.trim()})});setMessage(result.message);await load();}catch(value){setError(value instanceof Error?value.message:"Offer could not be cancelled");}finally{setBusy("");}}
+
+ const metricButtons:[[string,string],...[string,string][]]=[["ALL","All offers"],["OFFERED","Awaiting response"],["ACCEPTED","Accepted"],["DECLINED","Declined"],["CANCELLED","Cancelled"],["EXPIRED","Expired"]];
+ return <div className="resource-page offer-page"><div className="container section">
+  <Link className="back" href="/dashboard">← Dashboard</Link><span className="eyebrow">Offer operations</span>
+  <div className="resource-title"><div><h1>Offer pipeline</h1><p className="muted">Create, deliver and track every employment offer from one workspace.</p></div><span className="status status-ready">{eligible.length} ready to offer</span></div>
+  {message&&<div className="notice success">{message}</div>}{error&&<div className="notice error">{error}</div>}
+  <div className="offer-metrics">{metricButtons.map(([key,label])=><button key={key} className={filter===key?"active":""} onClick={()=>setFilter(key)}><span>{label}</span><b>{key==="ALL"?metrics.TOTAL||0:metrics[key]||0}</b></button>)}</div>
+  <div className="offer-layout">
+   <section className="table-card offer-list"><div className="table-head"><div><h2>Candidate offers</h2><p className="muted">Responses and expiry states update automatically.</p></div><input className="compact-search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="Search candidate or offer"/></div>
+    <div className="table-scroll"><table><thead><tr><th>Candidate</th><th>Offer details</th><th>Timeline</th><th>Status</th><th>Actions</th></tr></thead><tbody>{visible.map(offer=><tr key={offer.id}>
+     <td><b>{offer.applications?.name_at_application||"Application"}</b><small>{offer.applications?.email_at_application}</small><small>{offer.applications?.application_code}</small></td>
+     <td><b>{offer.employment_title||offer.applications?.job_positions?.title||"—"}</b><small>{offer.department} · {offer.employment_level} · {offer.employment_type}</small><small>{offer.currency} {Number(offer.salary).toLocaleString()}</small></td>
+     <td><small>Start: {offer.joining_date}</small><small>Expires: {offer.expiry_date}</small><small>Sent: {when(offer.sent_at)}</small>{offer.candidate_responded_at&&<small>Response: {when(offer.candidate_responded_at)}</small>}</td>
+     <td><span className={`status status-${offer.status.toLowerCase()}`}>{labels[offer.status]||offer.status}</span>{offer.response_notes&&<small className="response-note" title={offer.response_notes}>{offer.response_notes}</small>}</td>
+     <td><div className="action-cell">{offer.document_storage_path&&<button className="button small ghost" disabled={busy===`document-${offer.id}`} onClick={()=>document(offer)}>Open PDF</button>}{!offer.document_storage_path&&["APPROVED","OFFERED"].includes(offer.status)&&<button className="button small ghost" disabled={busy===`document-${offer.id}`} onClick={()=>document(offer)}>Generate PDF</button>}{["APPROVED","OFFERED"].includes(offer.status)&&offer.document_storage_path&&<button className="button small" disabled={busy===`send-${offer.id}`} onClick={()=>resend(offer)}>{offer.status==="OFFERED"?"Resend":"Send"}</button>}{["APPROVED","OFFERED","NEGOTIATION"].includes(offer.status)&&<button className="button small danger" disabled={busy===`cancel-${offer.id}`} onClick={()=>cancel(offer)}>Cancel</button>}</div></td>
+    </tr>)}</tbody></table></div>{!visible.length&&<div className="empty-state"><b>No matching offers</b><span>Change the status filter or search text.</span></div>}</section>
+   <form className="form-card offer-form" onSubmit={create}><h2>Create and send</h2><p className="muted">Admin, HR and Hiring Manager can send directly after the offer PDF is generated.</p>
+    <label>Selected candidate<select name="application_id" value={selected} onChange={event=>setSelected(event.target.value)} required><option value="">Choose an approved candidate</option>{eligible.map(item=><option key={item.id} value={item.id}>{item.name_at_application} — {item.job_positions?.title} ({item.application_code})</option>)}</select></label>
+    {candidate&&<div className="candidate-preview"><b>{candidate.name_at_application}</b><span>{candidate.email_at_application}</span><span>{candidate.job_positions?.department} · CV score {candidate.final_score??"—"}</span></div>}
+    <label>Employment title<input name="employment_title" defaultValue={candidate?.job_positions?.title||""} key={`${candidate?.id}-title`} required/></label>
+    <div className="form-grid compact"><label>Level<select name="employment_level" defaultValue={candidate?.job_positions?.experience_level||"Mid-level"}><option>Intern</option><option>Junior</option><option>Mid-level</option><option>Senior</option><option>Lead</option><option>Manager</option></select></label><label>Type<select name="employment_type" defaultValue={candidate?.job_positions?.employment_type||"Full-time"}><option>Internship</option><option>Full-time</option><option>Part-time</option><option>Contract</option></select></label></div>
+    <label>Department<input name="department" defaultValue={candidate?.job_positions?.department||""} key={`${candidate?.id}-department`} required/></label>
+    <div className="form-grid compact"><label>Salary<input name="salary" type="number" min="1" step="0.01" required/></label><label>Currency<input name="currency" defaultValue="PKR" maxLength={3} required/></label></div>
+    <div className="form-grid compact"><label>Joining date<input name="joining_date" type="date" required/></label><label>Offer expiry<input name="expiry_date" type="date" required/></label></div>
+    <label>Probation months<input name="probation_months" type="number" min="0" max="24" defaultValue="3" required/></label><button className="button full" disabled={busy==="create"||!selected}>{busy==="create"?"Creating and sending…":"Create and send offer"}</button>
+   </form>
+  </div>
+ </div></div>;
+}

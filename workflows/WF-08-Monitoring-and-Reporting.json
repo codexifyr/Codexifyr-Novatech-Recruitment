@@ -1,0 +1,338 @@
+{
+  "name": "WF-08 - Monitoring and Reporting",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "id": "c7b781fa-f205-4ce2-8805-f4e4ad012071",
+      "name": "Daily Report Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "83bb1e4f-4281-45f5-9604-434c6e28b719",
+      "name": "Manual Daily Report Test",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "operational_dashboard_metrics",
+        "limit": 1
+      },
+      "id": "cb77e774-d4fa-4716-8864-f577dbaa4b19",
+      "name": "Load Daily Operational Metrics",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        272,
+        80
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const m = $json;\nconst health = Number(m.dead_queue_count || 0) > 0 ? 'ATTENTION REQUIRED' : Number(m.open_errors || 0) > 0 ? 'MONITOR' : 'HEALTHY';\nconst breakdown = typeof m.application_status_breakdown === 'string' ? JSON.parse(m.application_status_breakdown) : (m.application_status_breakdown || {});\nconst statusLines = Object.entries(breakdown).sort(([a], [b]) => a.localeCompare(b)).map(([status, total]) => `- ${status}: ${total}`).join('\\n') || '- No application records';\nconst reportDate = new Date(m.generated_at || Date.now()).toISOString();\nconst email = `NovaTech Solutions - Daily Recruitment Operations Report\\nGenerated: ${reportDate}\\nSystem health: ${health}\\n\\nAPPLICATIONS\\nTotal candidates: ${m.candidates_total}\\nTotal applications: ${m.applications_total}\\nApplications today: ${m.applications_today}\\nManual review: ${m.manual_review_count}\\nShortlisted: ${m.shortlisted_count}\\n\\nAPPLICATION STATUS BREAKDOWN\\n${statusLines}\\n\\nINTERVIEWS\\nPending confirmations: ${m.pending_interview_confirmations}\\nPending feedback: ${m.pending_interview_feedback}\\n\\nOFFERS\\nPending approvals: ${m.pending_offer_approvals}\\nPending candidate responses: ${m.pending_candidate_offers}\\nExpired offers: ${m.expired_offers}\\n\\nONBOARDING\\nEmployees onboarding: ${m.employees_onboarding}\\nOverdue onboarding tasks: ${m.overdue_onboarding_tasks}\\n\\nERROR AND RECOVERY\\nOpen errors: ${m.open_errors}\\nRetrying errors: ${m.retrying_errors}\\nDead queue: ${m.dead_queue_count}\\nResolved today: ${m.errors_resolved_today}\\n\\nEXECUTIONS\\nExecutions today: ${m.executions_today}\\nSuccessful: ${m.successful_executions_today}\\nFailed/dead: ${m.failed_executions_today}\\nRetries: ${m.retries_today}\\nAverage application processing seconds: ${m.average_application_processing_seconds}\\n\\nNovaTech Solutions Automation`;\nreturn [{ json: { ...m, system_health: health, report_generated_at: reportDate, report_recipient: 'itxtaha77@gmail.com', email_subject: `NovaTech Daily Operations Report - ${reportDate.slice(0, 10)}`, email_message: email } }];"
+      },
+      "id": "25c70f87-5fb0-4dcf-94cb-a48aeee1c2eb",
+      "name": "Prepare Daily Operations Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        528,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.report_recipient }}",
+        "subject": "={{ $json.email_subject }}",
+        "message": "={{ $json.email_message }}",
+        "options": {}
+      },
+      "id": "b557a797-7293-4907-98f3-2ee0fe1a3405",
+      "name": "Send Daily Operations Report",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        784,
+        80
+      ],
+      "webhookId": "1eb39d5b-8cdd-40e8-abce-0d9ecfb1412f",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "rDJCSu8S6yHLuaYR",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const report = $('Prepare Daily Operations Report').first().json;\nreturn [{ json: { ...report, report_email_sent: true, correlation_id: `COR-REPORT-${Date.now()}`, log_metadata: { generated_at: report.report_generated_at, system_health: report.system_health, applications_total: report.applications_total, open_errors: report.open_errors, dead_queue_count: report.dead_queue_count, overdue_onboarding_tasks: report.overdue_onboarding_tasks } } }];"
+      },
+      "id": "8cbe5d6c-0bc3-4879-8c3c-d26211760405",
+      "name": "Prepare Daily Report Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "automation_logs",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "correlation_id",
+              "fieldValue": "={{ $json.correlation_id }}"
+            },
+            {
+              "fieldId": "workflow_name",
+              "fieldValue": "WF-08 - Monitoring and Reporting"
+            },
+            {
+              "fieldId": "workflow_version",
+              "fieldValue": "1.0.0"
+            },
+            {
+              "fieldId": "execution_id",
+              "fieldValue": "={{ $execution.id }}"
+            },
+            {
+              "fieldId": "entity_type",
+              "fieldValue": "daily_report"
+            },
+            {
+              "fieldId": "action",
+              "fieldValue": "DAILY_OPERATIONAL_REPORT"
+            },
+            {
+              "fieldId": "outcome",
+              "fieldValue": "SUCCESS"
+            },
+            {
+              "fieldId": "metadata",
+              "fieldValue": "={{ JSON.stringify($json.log_metadata) }}"
+            }
+          ]
+        }
+      },
+      "id": "14ff171c-b52f-49da-abc1-e5f153918f70",
+      "name": "Log Daily Report",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1312,
+        80
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const report = $('Prepare Daily Report Log').first().json;\nreturn [{ json: { success: true, report_email_sent: true, generated_at: report.report_generated_at, system_health: report.system_health, applications_total: report.applications_total, applications_today: report.applications_today, pending_offer_approvals: report.pending_offer_approvals, overdue_onboarding_tasks: report.overdue_onboarding_tasks, open_errors: report.open_errors, dead_queue_count: report.dead_queue_count, display_status: 'Daily Operations Report Sent' } }];"
+      },
+      "id": "d1159c5e-aa5f-4e46-a993-ab402ee6b837",
+      "name": "Return Daily Report Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "path": "novatech/reports/dashboard",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "bc221a25-7ef7-44a7-a9c3-e9c6888b64a1",
+      "name": "Admin Dashboard Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        368
+      ],
+      "webhookId": "f8000000-0000-4a00-8000-000000000010"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "operational_dashboard_metrics",
+        "limit": 1
+      },
+      "id": "1def238f-54b5-47d0-a586-e0f1dca1d94e",
+      "name": "Load Dashboard Metrics",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        272,
+        368
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const m = $json;\nconst dead = Number(m.dead_queue_count || 0);\nconst open = Number(m.open_errors || 0);\nconst overdue = Number(m.overdue_onboarding_tasks || 0);\nconst health = dead > 0 ? 'ATTENTION_REQUIRED' : open > 0 || overdue > 0 ? 'MONITOR' : 'HEALTHY';\nreturn [{ json: { success: true, generated_at: m.generated_at, system_health: health, summary: { candidates_total: m.candidates_total, applications_total: m.applications_total, applications_today: m.applications_today, manual_review_count: m.manual_review_count, pending_interview_confirmations: m.pending_interview_confirmations, pending_interview_feedback: m.pending_interview_feedback, pending_offer_approvals: m.pending_offer_approvals, pending_candidate_offers: m.pending_candidate_offers, expired_offers: m.expired_offers, employees_onboarding: m.employees_onboarding, overdue_onboarding_tasks: m.overdue_onboarding_tasks, open_errors: m.open_errors, retrying_errors: m.retrying_errors, dead_queue_count: m.dead_queue_count, errors_resolved_today: m.errors_resolved_today, executions_today: m.executions_today, successful_executions_today: m.successful_executions_today, failed_executions_today: m.failed_executions_today, retries_today: m.retries_today, average_application_processing_seconds: m.average_application_processing_seconds }, application_status_breakdown: m.application_status_breakdown, display_status: 'Operational Dashboard Metrics Loaded' } }];"
+      },
+      "id": "1163ddaf-9308-4dff-b6eb-d57c781e712f",
+      "name": "Return Admin Dashboard Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        528,
+        368
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Daily Report Schedule": {
+      "main": [
+        [
+          {
+            "node": "Load Daily Operational Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Daily Report Test": {
+      "main": [
+        [
+          {
+            "node": "Load Daily Operational Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Daily Operational Metrics": {
+      "main": [
+        [
+          {
+            "node": "Prepare Daily Operations Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Daily Operations Report": {
+      "main": [
+        [
+          {
+            "node": "Send Daily Operations Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Daily Operations Report": {
+      "main": [
+        [
+          {
+            "node": "Prepare Daily Report Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Daily Report Log": {
+      "main": [
+        [
+          {
+            "node": "Log Daily Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Daily Report": {
+      "main": [
+        [
+          {
+            "node": "Return Daily Report Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Admin Dashboard Request": {
+      "main": [
+        [
+          {
+            "node": "Load Dashboard Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Dashboard Metrics": {
+      "main": [
+        [
+          {
+            "node": "Return Admin Dashboard Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "135081ef-0c09-4406-aa2e-4443172348dd",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "8e5636d4ea21301bcee3485dafe413395d732724aaa50aa177880d363fc8d1a9"
+  },
+  "nodeGroups": [],
+  "id": "lJgtHIb2MmGhIh8b",
+  "tags": []
+}

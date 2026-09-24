@@ -1,0 +1,667 @@
+{
+  "name": "WF-04E - Interview Feedback and Selection",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "novatech/interviews/feedback",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "40b3715c-301b-4852-94a5-788e718003ca",
+      "name": "Receive Interview Feedback",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1680,
+        160
+      ],
+      "webhookId": "f40e0000-0000-4a00-8000-000000000002"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nconst interviewId = String(body.interview_id || '').trim();\nconst submittedBy = body.submitted_by ? String(body.submitted_by).trim() : null;\nconst recommendation = String(body.recommendation || '').trim().toUpperCase();\nconst scores = { technical_score: Number(body.technical_score), communication_score: Number(body.communication_score), problem_solving_score: Number(body.problem_solving_score), experience_score: Number(body.experience_score), team_fit_score: Number(body.team_fit_score) };\nconst uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\nconst errors = [];\nif (!uuidPattern.test(interviewId)) errors.push('A valid interview_id is required');\nif (submittedBy && !uuidPattern.test(submittedBy)) errors.push('submitted_by must be a valid UUID');\nfor (const [field, value] of Object.entries(scores)) if (!Number.isInteger(value) || value < 1 || value > 10) errors.push(`${field} must be an integer between 1 and 10`);\nif (!['SELECT', 'REJECT', 'REVIEW'].includes(recommendation)) errors.push('recommendation must be SELECT, REJECT, or REVIEW');\nreturn [{ json: { interview_id: interviewId, submitted_by: submittedBy, recommendation, comments: String(body.comments || '').trim() || null, ...scores, submitted_at: new Date().toISOString(), request_valid: errors.length === 0, validation_errors: errors } }];"
+      },
+      "id": "07548d51-6006-4a99-86b2-5a8e6c308497",
+      "name": "Validate Interview Feedback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1440,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "interviews",
+        "limit": 1,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.interview_id }}"
+            }
+          ]
+        }
+      },
+      "id": "8846f704-817a-4967-a3ee-a63f4f4023fe",
+      "name": "Load Feedback Interview",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1200,
+        160
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "f40e0000-0000-4a00-8000-000000000005",
+              "leftValue": "={{ ['CONFIRMED', 'COMPLETED'].includes($json.status) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "031f1012-b4f8-4d3e-81a9-76332fc19887",
+      "name": "Interview Eligible for Feedback?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -960,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "applications",
+        "limit": 1,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.application_id }}"
+            }
+          ]
+        }
+      },
+      "id": "c4d3f1d7-358e-4bd2-a1bf-61c655059d92",
+      "name": "Load Interview Application",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -720,
+        80
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "interview_feedback",
+        "limit": 1,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "interview_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Load Feedback Interview').first().json.id }}"
+            }
+          ]
+        }
+      },
+      "id": "6c200f54-cf97-4cdf-a3a3-73978da0da3d",
+      "name": "Find Existing Interview Feedback",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        80
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "f40e0000-0000-4a00-8000-000000000009",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f53c5f9d-4416-49e0-ac9e-780138598f4f",
+      "name": "Feedback Already Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -240,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const f = $('Validate Interview Feedback').first().json;\nconst interview = $('Load Feedback Interview').first().json;\nconst application = $('Load Interview Application').first().json;\nconst interviewAverage = (f.technical_score + f.communication_score + f.problem_solving_score + f.experience_score + f.team_fit_score) / 5;\nconst interviewScore = Math.round(interviewAverage * 10 * 100) / 100;\nconst ruleScore = Number(application.final_score ?? application.rule_score ?? 0);\nconst combinedScore = Math.round((ruleScore * 0.4 + interviewScore * 0.6) * 100) / 100;\nlet decision = 'MANUAL_REVIEW';\nlet reason = `Interview recommendation ${f.recommendation}; combined score ${combinedScore}`;\nif (f.recommendation === 'SELECT' && combinedScore >= 75) { decision = 'SELECTED'; reason = `Selected after interview; combined score ${combinedScore}`; }\nelse if (f.recommendation === 'REJECT' && combinedScore < 75) { decision = 'REJECTED'; reason = `Rejected after interview; combined score ${combinedScore}`; }\nreturn [{ json: { ...f, application_id: interview.application_id, application_code: application.application_code, previous_status: application.status, interview_code: interview.interview_code, interview_average: interviewAverage, interview_score: interviewScore, rule_score: ruleScore, combined_score: combinedScore, selection_decision: decision, decision_reason: reason } }];"
+      },
+      "id": "995ed80e-c2a7-45a1-b0e7-e449a5a24fe5",
+      "name": "Calculate Interview Decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "interview_feedback",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "interview_id",
+              "fieldValue": "={{ $json.interview_id }}"
+            },
+            {
+              "fieldId": "technical_score",
+              "fieldValue": "={{ $json.technical_score }}"
+            },
+            {
+              "fieldId": "communication_score",
+              "fieldValue": "={{ $json.communication_score }}"
+            },
+            {
+              "fieldId": "problem_solving_score",
+              "fieldValue": "={{ $json.problem_solving_score }}"
+            },
+            {
+              "fieldId": "experience_score",
+              "fieldValue": "={{ $json.experience_score }}"
+            },
+            {
+              "fieldId": "team_fit_score",
+              "fieldValue": "={{ $json.team_fit_score }}"
+            },
+            {
+              "fieldId": "comments",
+              "fieldValue": "={{ $json.comments }}"
+            },
+            {
+              "fieldId": "recommendation",
+              "fieldValue": "={{ $json.recommendation }}"
+            },
+            {
+              "fieldId": "submitted_by",
+              "fieldValue": "={{ $json.submitted_by }}"
+            },
+            {
+              "fieldId": "submitted_at",
+              "fieldValue": "={{ $json.submitted_at }}"
+            }
+          ]
+        }
+      },
+      "id": "346aebba-38d4-4e49-90c7-c8498790bd53",
+      "name": "Create Interview Feedback",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        240,
+        160
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "interviews",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Calculate Interview Decision').first().json.interview_id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "COMPLETED"
+            }
+          ]
+        }
+      },
+      "id": "964e615a-1591-4360-a36f-a8fcac2f5e14",
+      "name": "Complete Interview",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        480,
+        160
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "applications",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Calculate Interview Decision').first().json.application_id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "={{ $('Calculate Interview Decision').first().json.selection_decision }}"
+            },
+            {
+              "fieldId": "status_reason",
+              "fieldValue": "={{ $('Calculate Interview Decision').first().json.decision_reason }}"
+            },
+            {
+              "fieldId": "final_score",
+              "fieldValue": "={{ $('Calculate Interview Decision').first().json.combined_score }}"
+            }
+          ]
+        }
+      },
+      "id": "227f986b-9d58-451a-a698-4fc0ee49c63f",
+      "name": "Update Application Selection Decision",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        720,
+        160
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "tableId": "candidate_status_history",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "application_id",
+              "fieldValue": "={{ $('Calculate Interview Decision').first().json.application_id }}"
+            },
+            {
+              "fieldId": "previous_status",
+              "fieldValue": "={{ $('Calculate Interview Decision').first().json.previous_status }}"
+            },
+            {
+              "fieldId": "new_status",
+              "fieldValue": "={{ $('Calculate Interview Decision').first().json.selection_decision }}"
+            },
+            {
+              "fieldId": "reason",
+              "fieldValue": "={{ $('Calculate Interview Decision').first().json.decision_reason }}"
+            },
+            {
+              "fieldId": "workflow_name",
+              "fieldValue": "WF-04E - Interview Feedback and Selection"
+            },
+            {
+              "fieldId": "workflow_version",
+              "fieldValue": "1.0.0"
+            },
+            {
+              "fieldId": "execution_id",
+              "fieldValue": "={{ $execution.id }}"
+            },
+            {
+              "fieldId": "changed_by",
+              "fieldValue": "={{ $('Calculate Interview Decision').first().json.submitted_by }}"
+            },
+            {
+              "fieldId": "correlation_id",
+              "fieldValue": "={{ $('Load Interview Application').first().json.correlation_id }}"
+            }
+          ]
+        }
+      },
+      "id": "40b2563a-654d-4e05-b872-c97644de0c46",
+      "name": "Create Selection Status History",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        960,
+        160
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $('Calculate Interview Decision').first().json;\nreturn [{ json: { success: true, feedback_created: true, interview_id: result.interview_id, interview_code: result.interview_code, application_id: result.application_id, application_code: result.application_code, interview_average: result.interview_average, interview_score: result.interview_score, rule_score: result.rule_score, combined_score: result.combined_score, recommendation: result.recommendation, application_status: result.selection_decision, display_status: result.selection_decision === 'SELECTED' ? 'Candidate Selected' : result.selection_decision === 'REJECTED' ? 'Candidate Rejected After Interview' : 'Candidate Requires Manual Review', admin_message: result.decision_reason, next_workflow: result.selection_decision === 'SELECTED' ? 'WF-05 - Offer Creation and Approval Setup' : result.selection_decision === 'MANUAL_REVIEW' ? 'ADMIN_REVIEW' : 'PROCESS_END' } }];"
+      },
+      "id": "b662bf9e-1702-4c4c-b5f4-9e7f061072c6",
+      "name": "Prepare Selection Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const feedback = $json;\nreturn [{ json: { success: true, feedback_created: false, idempotent_result: true, feedback_id: feedback.id, interview_id: feedback.interview_id, recommendation: feedback.recommendation, display_status: 'Interview Feedback Already Submitted', admin_message: 'Feedback already exists for this interview, so no duplicate feedback was created.' } }];"
+      },
+      "id": "99efd206-e414-4f85-b44a-ee3f38abdb4e",
+      "name": "Prepare Existing Feedback Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const interview = $json;\nreturn [{ json: { success: false, feedback_created: false, interview_id: interview.id || $('Validate Interview Feedback').first().json.interview_id, interview_status: interview.status || 'NOT_FOUND', display_status: 'Feedback Submission Blocked', admin_message: interview.id ? `Interview must be CONFIRMED or COMPLETED. Current status: ${interview.status}.` : 'Interview was not found.' } }];"
+      },
+      "id": "09a85262-2248-4419-a7ae-8d1b16882b5a",
+      "name": "Prepare Feedback Blocked Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -720,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "3f0e1c6f-fac8-47b0-b0d2-09fce5451c07",
+      "name": "Return Interview Feedback Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1440,
+        160
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Receive Interview Feedback": {
+      "main": [
+        [
+          {
+            "node": "Validate Interview Feedback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Interview Feedback": {
+      "main": [
+        [
+          {
+            "node": "Load Feedback Interview",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Feedback Interview": {
+      "main": [
+        [
+          {
+            "node": "Interview Eligible for Feedback?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Interview Eligible for Feedback?": {
+      "main": [
+        [
+          {
+            "node": "Load Interview Application",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Feedback Blocked Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Interview Application": {
+      "main": [
+        [
+          {
+            "node": "Find Existing Interview Feedback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Existing Interview Feedback": {
+      "main": [
+        [
+          {
+            "node": "Feedback Already Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Feedback Already Exists?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Existing Feedback Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Calculate Interview Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Interview Decision": {
+      "main": [
+        [
+          {
+            "node": "Create Interview Feedback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Interview Feedback": {
+      "main": [
+        [
+          {
+            "node": "Complete Interview",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Complete Interview": {
+      "main": [
+        [
+          {
+            "node": "Update Application Selection Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Application Selection Decision": {
+      "main": [
+        [
+          {
+            "node": "Create Selection Status History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Selection Status History": {
+      "main": [
+        [
+          {
+            "node": "Prepare Selection Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Selection Result": {
+      "main": [
+        [
+          {
+            "node": "Return Interview Feedback Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Existing Feedback Result": {
+      "main": [
+        [
+          {
+            "node": "Return Interview Feedback Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Feedback Blocked Result": {
+      "main": [
+        [
+          {
+            "node": "Return Interview Feedback Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "c7a75e74-bb69-49ef-b52c-a6423302b10d",
+  "meta": {
+    "instanceId": "8e5636d4ea21301bcee3485dafe413395d732724aaa50aa177880d363fc8d1a9"
+  },
+  "nodeGroups": [],
+  "id": "sKekzhJCHTzUsOqD",
+  "tags": []
+}

@@ -1,0 +1,12 @@
+"use client";
+import { FormEvent, useEffect, useState } from "react";
+import { api } from "@/lib/api";
+
+type Preferences = { email_enabled: boolean; in_app_enabled: boolean; interview_alerts: boolean; approval_alerts: boolean; digest_frequency: "IMMEDIATE" | "DAILY" | "WEEKLY" | "NONE" };
+const defaults: Preferences = { email_enabled: true, in_app_enabled: true, interview_alerts: true, approval_alerts: true, digest_frequency: "DAILY" };
+export default function NotificationPreferences() {
+  const [preferences, setPreferences] = useState<Preferences>(defaults); const [message, setMessage] = useState(""); const [error, setError] = useState("");
+  useEffect(() => { api<{ preferences: Preferences }>("/operations/notification-preferences").then(result => setPreferences({ ...defaults, ...result.preferences })).catch(err => setError(err.message)); }, []);
+  async function save(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = new FormData(event.currentTarget); try { const result = await api<{ message: string }>("/operations/notification-preferences", { method: "PATCH", body: JSON.stringify({ email_enabled: data.get("email_enabled") === "on", in_app_enabled: data.get("in_app_enabled") === "on", interview_alerts: data.get("interview_alerts") === "on", approval_alerts: data.get("approval_alerts") === "on", digest_frequency: data.get("digest_frequency") }) }); setMessage(result.message); } catch (err) { setError(err instanceof Error ? err.message : "Preferences could not be saved"); } }
+  return <form className="form-card" onSubmit={save}><h2>Notification preferences</h2><label className="check"><input name="email_enabled" type="checkbox" defaultChecked={preferences.email_enabled} />Email notifications</label><label className="check"><input name="in_app_enabled" type="checkbox" defaultChecked={preferences.in_app_enabled} />In-app notifications</label><label className="check"><input name="interview_alerts" type="checkbox" defaultChecked={preferences.interview_alerts} />Interview alerts</label><label className="check"><input name="approval_alerts" type="checkbox" defaultChecked={preferences.approval_alerts} />Approval alerts</label><label>Digest frequency<select name="digest_frequency" defaultValue={preferences.digest_frequency}><option>IMMEDIATE</option><option>DAILY</option><option>WEEKLY</option><option>NONE</option></select></label>{message && <div className="notice success">{message}</div>}{error && <div className="notice error">{error}</div>}<button className="button">Save preferences</button></form>;
+}

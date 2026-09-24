@@ -1,0 +1,282 @@
+{
+  "name": "WF-04 - Interview Scheduling",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "4798c4a5-05ea-4ed4-a0a8-773ecb16988b",
+      "name": "Start Interview Scheduling",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        -512,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d4e5f601-1234-4a56-8b78-400000000002",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "SHORTLISTED",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "db173ed8-ba81-4319-a144-af55ef8b79dd",
+      "name": "Shortlisted Candidate?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -256,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json;\nconst start = input.scheduled_start ? new Date(input.scheduled_start) : new Date(Date.now() + 48 * 60 * 60 * 1000);\nconst end = input.scheduled_end ? new Date(input.scheduled_end) : new Date(start.getTime() + 60 * 60 * 1000);\nconst suffix = `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;\nreturn [{ json: { ...input, interview_code: `INT-${new Date().getUTCFullYear()}-${suffix.slice(-10)}`, scheduled_start: start.toISOString(), scheduled_end: end.toISOString(), meeting_url: input.meeting_url || null, confirmation_token: `CONF-${suffix}`, interview_status: 'PENDING_CONFIRMATION' } }];"
+      },
+      "id": "f5cf2a03-b638-43b1-99c0-83317ba27213",
+      "name": "Prepare Interview Record",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "interviews",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "interview_code",
+              "fieldValue": "={{ $json.interview_code }}"
+            },
+            {
+              "fieldId": "application_id",
+              "fieldValue": "={{ $json.application_id }}"
+            },
+            {
+              "fieldId": "scheduled_start",
+              "fieldValue": "={{ $json.scheduled_start }}"
+            },
+            {
+              "fieldId": "scheduled_end",
+              "fieldValue": "={{ $json.scheduled_end }}"
+            },
+            {
+              "fieldId": "meeting_url",
+              "fieldValue": "={{ $json.meeting_url }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "PENDING_CONFIRMATION"
+            },
+            {
+              "fieldId": "confirmation_token",
+              "fieldValue": "={{ $json.confirmation_token }}"
+            }
+          ]
+        }
+      },
+      "id": "dbf861f6-c127-469f-96f0-48b949a38475",
+      "name": "Create Interview",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        256,
+        0
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const interview = $json;\nconst source = $('Prepare Interview Record').first().json;\nreturn [{ json: { ...source, interview_id: interview.id, interview_code: interview.interview_code || source.interview_code, interview_status: interview.status || source.interview_status } }];"
+      },
+      "id": "e84b27af-50dd-4aa0-b1ce-119bbab02270",
+      "name": "Attach Interview ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "applications",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.application_id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "INTERVIEW_SCHEDULED"
+            },
+            {
+              "fieldId": "status_reason",
+              "fieldValue": "Interview created and awaiting candidate confirmation"
+            }
+          ]
+        }
+      },
+      "id": "23e47dd9-68f6-4a82-aa34-bc6688b5f2ea",
+      "name": "Update Application Interview Status",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        752,
+        0
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "nycOZgSYcd2BLIzl",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('Attach Interview ID').first().json;\n\nreturn [{\n  json: {\n    ...source,\n    interview_created: true,\n    status: \"INTERVIEW_SCHEDULED\",\n    interview_status: source.interview_status,\n    display_status: \"Interview Scheduled - Confirmation Pending\",\n    admin_message: \"Interview record created successfully and is awaiting candidate confirmation.\",\n    next_workflow: \"WF-04 - Candidate Confirmation and Reminders\"\n  }\n}];"
+      },
+      "id": "1ddb2745-e67b-489d-ae0e-8c55977e6cb2",
+      "name": "Return Interview Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1008,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { ...$json, interview_created: false, display_status: 'Interview Not Scheduled', admin_message: 'Application is not shortlisted, so interview scheduling was skipped.', next_workflow: $json.status === 'MANUAL_REVIEW' ? 'ADMIN_MANUAL_REVIEW' : 'PROCESS_END' } }];"
+      },
+      "id": "3074d5a2-31d8-4f4f-bbf8-bf2b22a2d994",
+      "name": "Return Scheduling Skipped",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        208
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Start Interview Scheduling": {
+      "main": [
+        [
+          {
+            "node": "Shortlisted Candidate?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shortlisted Candidate?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Interview Record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Scheduling Skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Interview Record": {
+      "main": [
+        [
+          {
+            "node": "Create Interview",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Interview": {
+      "main": [
+        [
+          {
+            "node": "Attach Interview ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach Interview ID": {
+      "main": [
+        [
+          {
+            "node": "Update Application Interview Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Application Interview Status": {
+      "main": [
+        [
+          {
+            "node": "Return Interview Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "03e3258a-78b6-4841-819e-0c9972dca524",
+  "meta": {
+    "instanceId": "8e5636d4ea21301bcee3485dafe413395d732724aaa50aa177880d363fc8d1a9"
+  },
+  "nodeGroups": [],
+  "id": "fVuAKOAu84TXsg62",
+  "tags": []
+}

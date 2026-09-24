@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: novatech-recruitment-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: FRONTEND_URL
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: WEBHOOK_BASE_URL
+        sync: false
+      - key: N8N_WEBHOOK_SECRET
+        sync: false
+      - key: OTP_PEPPER
+        generateValue: true
+

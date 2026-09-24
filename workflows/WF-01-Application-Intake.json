@@ -1,0 +1,227 @@
+{
+  "name": "WF-01 - Application Intake",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "novatech/applications",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "3bd7e884-c73f-45d8-8a21-d991e7c67f03",
+      "name": "Receive Application",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -784,
+        80
+      ],
+      "webhookId": "novatech-application-intake"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json.body ?? $json;\nconst now = new Date();\nconst requestId = String(input.request_id ?? input.event_id ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);\nconst correlationId = `COR-${now.toISOString().slice(0, 10).replaceAll('-', '')}-${requestId.replace(/[^a-zA-Z0-9]/g, '').slice(-8)}`;\n\nconst name = String(input.name ?? input.full_name ?? '').trim().replace(/\\s+/g, ' ');\nconst email = String(input.email ?? '').trim().toLowerCase();\nconst phone = String(input.phone ?? '').trim();\nconst position = String(input.position ?? input.job_position ?? '').trim();\nconst experience = input.experience_years === undefined || input.experience_years === null || input.experience_years === '' ? null : Number(input.experience_years);\nconst skills = Array.isArray(input.skills) ? input.skills.map((skill) => String(skill).trim()).filter(Boolean) : String(input.skills ?? '').split(',').map((skill) => skill.trim()).filter(Boolean);\nconst expectedSalary = input.expected_salary === undefined || input.expected_salary === null || input.expected_salary === '' ? null : Number(input.expected_salary);\nconst joiningDate = input.joining_date ? String(input.joining_date).slice(0, 10) : null;\nconst cvUrl = input.cv_url ?? input.cv_link ?? null;\nconst cvPresent = Boolean(input.cv_present || cvUrl || input.cv_text);\n\nconst errors = [];\nif (!name) errors.push('Name is required');\nif (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) errors.push('A valid email is required');\nif (!/^\\+?[0-9()\\-\\s]{7,20}$/.test(phone)) errors.push('A valid phone number is required');\nif (!['Python Developer', 'Business Development Executive', 'QA Engineer'].includes(position)) errors.push('Position is not supported');\nif (experience === null || Number.isNaN(experience) || experience < 0 || experience > 60) errors.push('Experience must be between 0 and 60 years');\nif (expectedSalary === null || Number.isNaN(expectedSalary) || expectedSalary < 0) errors.push('Expected salary must be a non-negative number');\nif (!joiningDate || Number.isNaN(Date.parse(joiningDate))) errors.push('A valid joining date is required');\nif (!cvPresent) errors.push('CV or CV link is required');\n\nconst normalized = {\n  correlation_id: correlationId,\n  event_id: `APPLICATION_EVENT_${requestId}`,\n  candidate_id: null,\n  name,\n  email,\n  phone,\n  position,\n  experience_years: experience,\n  skills,\n  expected_salary: expectedSalary,\n  currency: String(input.currency ?? 'PKR').toUpperCase(),\n  joining_date: joiningDate,\n  cv_url: cvUrl,\n  cv_present: cvPresent,\n  status: errors.length ? 'MANUAL_REVIEW' : 'VALIDATED',\n  validation_errors: errors,\n  received_at: now.toISOString(),\n  source: String(input.source ?? 'webhook')\n};\n\nreturn [{ json: { ...normalized, is_valid: errors.length === 0, manual_review_required: errors.length > 0 } }];"
+      },
+      "id": "b767c473-5a6f-46a3-9270-54c6c0b78ae3",
+      "name": "Validate and Normalize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -528,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "valid-application-condition",
+              "leftValue": "={{ $json.is_valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c1da300b-2206-49eb-8fa0-430f3e2c53de",
+      "name": "Valid Application?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -320,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { ...$json, intake_result: 'VALIDATED', next_workflow: 'WF-02 - Candidate Processing', message: 'Application accepted for candidate processing' } }];"
+      },
+      "id": "7ab5ce5b-e58f-427f-96ec-b400d96037fe",
+      "name": "Prepare Validated Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { ...$json, intake_result: 'MANUAL_REVIEW', next_workflow: 'WF-07 - Error and Recovery', message: 'Application requires manual review', review_reason: $json.validation_errors.join('; ') } }];"
+      },
+      "id": "5e845784-0c81-4934-a840-83a1978a1029",
+      "name": "Prepare Manual Review Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        32,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "401842e0-a727-4465-8271-87ab2d75e812",
+      "name": "Return Intake Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        400,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "EwZrwzrTOLJKMxbI",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/EwZrwzrTOLJKMxbI",
+          "cachedResultName": "WF-02 - Candidate Processing"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        128,
+        -48
+      ],
+      "id": "e69fe9aa-7341-4497-8eac-cff3514ab4c1",
+      "name": "Run WF-02 Candidate Processing"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Receive Application": {
+      "main": [
+        [
+          {
+            "node": "Validate and Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate and Normalize": {
+      "main": [
+        [
+          {
+            "node": "Valid Application?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid Application?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Validated Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Manual Review Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Validated Result": {
+      "main": [
+        [
+          {
+            "node": "Run WF-02 Candidate Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Manual Review Result": {
+      "main": [
+        [
+          {
+            "node": "Return Intake Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run WF-02 Candidate Processing": {
+      "main": [
+        [
+          {
+            "node": "Return Intake Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "5f2973c7-8a55-4738-b828-eabfb802c9a0",
+  "meta": {
+    "instanceId": "8e5636d4ea21301bcee3485dafe413395d732724aaa50aa177880d363fc8d1a9"
+  },
+  "nodeGroups": [],
+  "id": "EXLq2A9VGth1u6b5",
+  "tags": []
+}
