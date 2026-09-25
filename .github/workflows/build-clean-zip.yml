@@ -1,0 +1,65 @@
+name: Build Clean ZIP
+on:
+  push:
+    branches: [chatgpt-clean-zip-build]
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install black sqlparse
+      - name: Clean sources
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import io,re,tokenize,json,sqlparse
+          root=Path(".")
+          for p in root.rglob("*"):
+              if not p.is_file() or ".git" in p.parts: continue
+              if p.name==".env" or p.name.startswith(".env."):
+                  p.unlink(); continue
+              try: s=p.read_text(encoding="utf-8")
+              except: continue
+              if p.suffix==".py":
+                  try:
+                      ts=tokenize.generate_tokens(io.StringIO(s).readline)
+                      s=tokenize.untokenize(t for t in ts if t.type!=tokenize.COMMENT)
+                  except: pass
+              elif p.suffix==".sql":
+                  s=sqlparse.format(s,strip_comments=True,reindent=True,keyword_case="upper")
+              elif p.suffix in {".css",".scss"}:
+                  s=re.sub(r"/[*].*?[*]/","",s,flags=re.S)
+              p.write_text(s,encoding="utf-8")
+          PY
+          black backend --quiet || true
+          cd frontend
+          npx --yes prettier@3 --write "app/**/*.{ts,tsx,css}" "components/**/*.{ts,tsx}" "lib/**/*.{ts,tsx}" "e2e/**/*.{ts,tsx}" "*.{js,mjs,ts,json}" || true
+          cd ..
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          for p in Path(".").rglob("*"):
+              if not p.is_file() or p.suffix not in {".js",".jsx",".ts",".tsx",".mjs",".cjs"}: continue
+              s=p.read_text(encoding="utf-8")
+              s=re.sub(r"(?m)^[ 	]*//[^\n]*(?:\n|$)","",s)
+              s=re.sub(r"/[*].*?[*]/","",s,flags=re.S)
+              p.write_text(s,encoding="utf-8")
+          PY
+          cd frontend
+          npx --yes prettier@3 --write "app/**/*.{ts,tsx,css}" "components/**/*.{ts,tsx}" "lib/**/*.{ts,tsx}" "e2e/**/*.{ts,tsx}" "*.{js,mjs,ts,json}" || true
+          cd ..
+          find . -type f \( -name ".env" -o -name ".env.*" \) -delete
+          rm -rf .git
+      - name: Package
+        run: |
+          cd ..
+          mv Codexifyr-Novatech-Recruitment Codexifyr-Novatech-Recruitment-clean
+          zip -qr Codexifyr-Novatech-Recruitment.zip Codexifyr-Novatech-Recruitment-clean
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Codexifyr-Novatech-Recruitment
+          path: ../Codexifyr-Novatech-Recruitment.zip
+          retention-days: 1
